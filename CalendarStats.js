@@ -21,6 +21,9 @@ var MEETING_TAG = 'TAG: ';
 var RANGE_DAYS_PAST = 30;
 var RANGE_DAYS_FUTURE = 30;
 
+// Name of the sheet to show the results
+var ONE_ON_ONE_STATS_SHEET = '1:1 Stats';
+
 var range = 'A1:B10';
 
 var outputCell = 'C2';
@@ -90,6 +93,8 @@ function reportStats(events) {
   for (const [tag, count] of Object.entries(tags)) {
     Logger.log(tag + ': ' + count);
   }
+
+  updateStatsSheet(oneOnOneFreq);
 }
 
 // Given a map of '1:1 partner => days since last 1:1 (`freqMap`), and a CalendarEvent (`event`)
@@ -99,12 +104,12 @@ function trackLatestOneOnOne(freqMap, event) {
   var now = new Date()
   var diffMs = now - event.getStartTime();
   if (diffMs < 0) {
-    Logger.log(event.getStartTime() + ' is in the future so I\'m skipping it');
+    //Logger.log(event.getStartTime() + ' is in the future so I\'m skipping it');
     return;
   }
 
   var daysSinceEvent = Math.floor(diffMs / 1000 / 60 / 60 / 24);
-  var guest = getOneOnOneGuestEmail(event);
+  var guest = cleanGuestEmail(getOneOnOneGuestEmail(event));
   if (guest in freqMap) {
     if (freqMap[guest] > daysSinceEvent) {
       freqMap[guest] = daysSinceEvent;
@@ -114,7 +119,7 @@ function trackLatestOneOnOne(freqMap, event) {
     freqMap[guest] = daysSinceEvent;
   }
 
-  Logger.log('Most recent 1:1 with ' + guest + ': ' + freqMap[guest]);
+  //Logger.log('Most recent 1:1 with ' + guest + ': ' + freqMap[guest]);
 }
 
 // Given and event with two guests, returns the guest email that isn't OWNER_EMAIL
@@ -134,6 +139,35 @@ function getOneOnOneGuestEmail(event) {
   }
 
   return guest;
+}
+
+// Given an email address, strips off the domain if it's the same as OWNER_DOMAIN
+function cleanGuestEmail(email) {
+  return email.replace('@' + OWNER_DOMAIN, '');
+}
+
+// Takes a map of email -> days since last 1:1 and populates ONE_ON_ONE_STATS_SHEET
+// with the data.
+function updateStatsSheet(oneOnOneFreq) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONE_ON_ONE_STATS_SHEET);
+  
+  var freqEntries = Object.entries(oneOnOneFreq);
+
+  // Set and freeze the column headers
+  var r = sheet.getRange("A1:B1");
+  var hdrs = [["Who", "Time Since Last 1:1"]];
+  r.setValues(hdrs);
+  sheet.setFrozenRows(1);
+
+  // Generate the range
+  var range = ['A2:B', freqEntries.length + 1].join("");
+
+  // Populate the data
+  r = sheet.getRange(range);
+  r.setValues(Object.entries(oneOnOneFreq));
+
+  // Sort the data
+  r.sort({column: 2, ascending: false});
 }
 
 // Increments element `tag` in dictionary `dict`
