@@ -1,2 +1,3 @@
 # gcalstats
-Scripts for pulling statistics from Google Calendar
+
+Scripts for pulling statistics from Google Calendar.
