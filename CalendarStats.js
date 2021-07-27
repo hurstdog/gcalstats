@@ -10,6 +10,7 @@
 // Edit the entries in the following section to tailor the script
 // to your preferences.
 
+// Your Google Calendar username and domain.
 var OWNER_USERNAME = 'andrew';
 var OWNER_DOMAIN = 'hurstdog.org';
 var OWNER_EMAIL = OWNER_USERNAME + '@' + OWNER_DOMAIN;
@@ -56,7 +57,11 @@ function reportStats(events) {
   var oneOnOnes = 0;
   var blockedTime = 0;
   var meetings = 0;
+
+  // 'tag name' => count
   var tags = {};
+  // '1:1 partner' => days since last 1:1
+  var oneOnOneFreq = {};
   for (const event of events) {
     var tag = extractTag(event);
     var guests = event.getGuestList(true);
@@ -68,6 +73,7 @@ function reportStats(events) {
       blockedTime++;
     } else if (guests.length == 2) {
       oneOnOnes++;
+      trackLatestOneOnOne(oneOnOneFreq, event);
       //Logger.log('Found a 1:1 with guests! ' + event.getTitle());
       //printGuests(guests);
     } else {
@@ -84,6 +90,50 @@ function reportStats(events) {
   for (const [tag, count] of Object.entries(tags)) {
     Logger.log(tag + ': ' + count);
   }
+}
+
+// Given a map of '1:1 partner => days since last 1:1 (`freqMap`), and a CalendarEvent (`event`)
+// This extracts out the 1:1 partner name and updates it with the minimum gap since the last 1:1.
+// Skips any events in the future.
+function trackLatestOneOnOne(freqMap, event) {
+  var now = new Date()
+  var diffMs = now - event.getStartTime();
+  if (diffMs < 0) {
+    Logger.log(event.getStartTime() + ' is in the future so I\'m skipping it');
+    return;
+  }
+
+  var daysSinceEvent = Math.floor(diffMs / 1000 / 60 / 60 / 24);
+  var guest = getOneOnOneGuestEmail(event);
+  if (guest in freqMap) {
+    if (freqMap[guest] > daysSinceEvent) {
+      freqMap[guest] = daysSinceEvent;
+    }
+    // else ignore it, we already have a more recent event
+  } else {
+    freqMap[guest] = daysSinceEvent;
+  }
+
+  Logger.log('Most recent 1:1 with ' + guest + ': ' + freqMap[guest]);
+}
+
+// Given and event with two guests, returns the guest email that isn't OWNER_EMAIL
+// Prints an error and returns null on lists that don't contain two entries.
+function getOneOnOneGuestEmail(event) {
+  var guestList = event.getGuestList(true);
+  if (guestList.length != 2) {
+    Logger.log('Too many guests in purported 1:1 (Title: ' + event.getTitle() + ', skipping');
+    return null;
+  }
+
+  var guest = "";
+  for (const g of guestList) {
+    if (g.getEmail() != OWNER_EMAIL) {
+      guest = g.getEmail();
+    }
+  }
+
+  return guest;
 }
 
 // Increments element `tag` in dictionary `dict`
