@@ -24,10 +24,6 @@ var RANGE_DAYS_FUTURE = 30;
 // Name of the sheet to show the results
 var ONE_ON_ONE_STATS_SHEET = '1:1 Stats';
 
-var range = 'A1:B10';
-
-var outputCell = 'C2';
-
 // End Constants. Below is just code, and bad code at that. Ignore it.
 /////////////////////////////////////////////////////////////////////////////////
 
