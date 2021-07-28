@@ -86,6 +86,8 @@ class OneOnOneStatCollector {
   // updates the statistics for 1:1s with that person.
   // This skips any events in the future.
   //
+  // TODO: Collect stats on 1:1 frequency as well.
+  //
   // Arguments:
   //   event: CalendarEvent
   trackOneOnOne(event) {
@@ -142,7 +144,11 @@ class OneOnOneStatCollector {
   _flattenFreq(freq) {
     var f = [];
     for (const [k, v] of Object.entries(freq)) {
-      f.push([k, v[0], v[1], v[0] - v[1]]);
+      if (v[1]) {
+        f.push([k, v[0], v[1], v[0] - v[1]]);
+      } else {
+        f.push([k, v[0], v[1], ""]);
+      }
     }
     //this._printFlatFreq(f);
     return f;
@@ -187,8 +193,6 @@ function ListMeetings() {
 // 1:1s
 // Group meetings
 // Focused time?
-// TODO: Update stats in a sheet, with columns based on the tags
-// TODO: Collect stats on 1:1 frequency as well.
 function reportStats(events) {
   var numEvents = events.length;
 
