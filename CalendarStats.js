@@ -78,7 +78,7 @@ class OneOnOneStatCollector {
       //Logger.log(row[0] + ' = [' + freq[row[0]] + ']');
     }
 
-    //printFreq(freq);
+    //this._printFreq(freq);
     this.oneOnOneFreq = freq;
   }
 
@@ -133,12 +133,37 @@ class OneOnOneStatCollector {
     // Populate the data
     r = this.sheet.getRange(range);
 
-    //r.setValues(Object.entries(flattenFreq(oneOnOneFreq)));
-    r.setValues(flattenFreq(this.oneOnOneFreq));
+    r.setValues(this._flattenFreq(this.oneOnOneFreq));
 
     // Sort the data
     r.sort({column: 4, ascending: false});
   }
+
+  _flattenFreq(freq) {
+    var f = [];
+    for (const [k, v] of Object.entries(freq)) {
+      f.push([k, v[0], v[1], v[0] - v[1]]);
+    }
+    //this._printFlatFreq(f);
+    return f;
+  }
+
+  _printFlatFreq(freq) {
+    Logger.log('Printing the flat freq');
+    for (const row of freq) {
+      Logger.log('row is [' + row + ']');
+    }
+  }
+
+  _printFreq(freq) {
+    Logger.log('Printing the 1:1 frequency');
+    for (const [k, v] of Object.entries(freq)) {
+      if (k && v) {
+        Logger.log(k + ' -> [' + v + ']');
+      }
+    }
+  }
+
 }
 
 // End OneOnOneStatCollector
@@ -243,24 +268,6 @@ function getStatsSheet() {
   return sheet;
 }
 
-function flattenFreq(freq) {
-  var f = [];
-  for (const [k, v] of Object.entries(freq)) {
-    f.push([k, v[0], v[1], v[0] - v[1]]);
-  }
-  //printFlatFreq(f);
-  return f;
-}
-
-// Increments element `tag` in dictionary `dict`
-function inc(dict, tag) {
-  if (tag in dict) {
-    dict[tag]++;
-  } else {
-    dict[tag] = 1;
-  }
-}
-
 // Given a CalendarEvent, will read the description and return any of the text
 // on a line after the keyword MEETING_TAG (currently 'TAG: ')
 // e.g. return $1 from "^\w*TAG: (.*)\w*$"
@@ -278,19 +285,13 @@ function extractTag(event) {
   return tag;
 }
 
-function printFreq(freq) {
-  Logger.log('Printing the 1:1 frequency');
-  for (const [k, v] of Object.entries(freq)) {
-    if (k && v) {
-      Logger.log(k + ' -> [' + v + ']');
-    }
-  }
-}
 
-function printFlatFreq(freq) {
-  Logger.log('Printing the flat freq');
-  for (const row of freq) {
-    Logger.log('row is [' + row + ']');
+// Increments element `tag` in dictionary `dict`
+function inc(dict, tag) {
+  if (tag in dict) {
+    dict[tag]++;
+  } else {
+    dict[tag] = 1;
   }
 }
 
