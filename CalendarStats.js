@@ -32,7 +32,10 @@ const ONE_ON_ONE_STATS_HDRS = [["Who",
                                 "Time Since Last 1:1",
                                 "Time Until next 1:1",
                                 "SLO",
-                                "Overdue"]];
+                                "Days Overdue"]];
+
+// Which column to sort the results by. This corresponds to ONE_ON_ONE_STATS_HDRS.
+const ONE_ON_ONE_SORT_COLUMN = 5;
 
 // End Constants. Below is just code, and bad code at that. Ignore it.
 /////////////////////////////////////////////////////////////////////////////////
@@ -160,7 +163,7 @@ class OneOnOneStatCollector {
     r.setValues(this.getFlatFreq());
 
     // Sort the data
-    r.sort({column: 4, ascending: false});
+    r.sort({column: ONE_ON_ONE_SORT_COLUMN, ascending: false});
 
     // Resize columns last, to match the data we just added.
     this.sheet.autoResizeColumns(1, 4);
@@ -177,21 +180,32 @@ class OneOnOneStatCollector {
       var last = v[0];
       var next = v[1];
       var slo = v[2];
-      var outslo = last - slo;
+      var overdue = undefined;
+
+      // Clean up next, so that it displays positive values rather than negative.
+      if (next != undefined && next < 0) {
+        next = Math.abs(next);
+      }
 
       // If we don't have useful variables to calculate how far out of SLO we are,
       // try to show something reasonable.
-      if (slo == undefined) {
-        outslo = "";
+      if (!slo) {
+        overdue = "";
       } else {
-        if (last == undefined) {
-          outslo = slo;
+        if (!last) {
+          overdue = slo;
+        } else {
+          overdue = last - slo;
+        }
+
+        // If it's less than zero, we're totally fine, don't show anything.
+        if (overdue <= 0) {
+          overdue = "";
         }
       }
 
-      f.push([guest, last, next, slo, outslo]);
+      f.push([guest, last, next, slo, overdue]);
     }
-    //this._printFlatFreq(f);
     return f;
   }
 
