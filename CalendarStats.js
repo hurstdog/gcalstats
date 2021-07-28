@@ -23,8 +23,10 @@ const RANGE_DAYS_FUTURE = 30;
 
 // Name of the sheet to show the results.
 // Will create if it doesn't exist, otherwise will re-use the existing.
-const ONE_ON_ONE_STATS_SHEET = '1:1 Stats';
-const ONE_ON_ONE_HDR_RANGE = "A1:E1";
+const ONE_ON_ONE_STATS_SHEET = "1:1 Stats";
+const ONE_ON_ONE_HDR_RANGE = "A1:F1";
+const ONE_ON_ONE_STATS_DATA_RANGE_COLS = "A2:F";
+const ONE_ON_ONE_STATS_DATA_RANGE_MAX = "A2:F200";
 
 // Headers for the stats rows. Note that this is the order needed in the stats
 // frequency dict as well.
@@ -32,7 +34,8 @@ const ONE_ON_ONE_STATS_HDRS = [["Who",
                                 "Time Since Last 1:1",
                                 "Time Until next 1:1",
                                 "SLO",
-                                "Days Overdue"]];
+                                "Days Overdue",
+                                "Notes"]];
 
 // Which column to sort the results by. This corresponds to ONE_ON_ONE_STATS_HDRS.
 const ONE_ON_ONE_SORT_COLUMN = 5;
@@ -61,6 +64,8 @@ class OneOnOneStatCollector {
     //        days since last 1:1,
     //        days until next 1:1,
     //        frequency SLO,
+    //        overdue,
+    //        Notes,
     //        ]
     this.oneOnOneFreq = {};
     this._populateOneOnOneFreq()
@@ -71,7 +76,7 @@ class OneOnOneStatCollector {
   //  in that order.
   //
   _populateOneOnOneFreq() {
-    var r = this.sheet.getRange('A2:D200');
+    var r = this.sheet.getRange(ONE_ON_ONE_STATS_DATA_RANGE_MAX);
 
     var freq = {}
 
@@ -82,13 +87,13 @@ class OneOnOneStatCollector {
       var nextO = row[2];
       var slo = row[3];
       var over = row[4];
+      var notes = row[5];
 
       if (email == "") {
         break;
       }
 
-      freq[email] = [lastO, nextO, slo, over];
-      //Logger.log(email + ' = [' + freq[email] + ']');
+      freq[email] = [lastO, nextO, slo, over, notes];
     }
 
     //this._printFreq(freq);
@@ -155,7 +160,7 @@ class OneOnOneStatCollector {
     this.sheet.setFrozenRows(1);
 
     // Generate the range
-    var range = ['A2:E', freqEntries.length + 1].join("");
+    var range = [ONE_ON_ONE_STATS_DATA_RANGE_COLS, freqEntries.length + 1].join("");
 
     // Populate the data
     r = this.sheet.getRange(range);
@@ -181,6 +186,7 @@ class OneOnOneStatCollector {
       var next = v[1];
       var slo = v[2];
       var overdue = undefined;
+      var notes = v[4];
 
       // Clean up next, so that it displays positive values rather than negative.
       if (next != undefined && next < 0) {
@@ -204,7 +210,7 @@ class OneOnOneStatCollector {
         }
       }
 
-      f.push([guest, last, next, slo, overdue]);
+      f.push([guest, last, next, slo, overdue, notes]);
     }
     return f;
   }
