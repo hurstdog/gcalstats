@@ -5,7 +5,7 @@
 // about the owners calendar, and throws them into a handy spreadsheet.
 
 /////////////////////////////////////////////////////////////////////////////////
-// Constants.
+// Constants
 //
 // Edit the entries in the following section to tailor the script
 // to your preferences.
@@ -36,18 +36,32 @@ const ONE_ON_ONE_STATS_HDRS = [["Who",
 // End Constants. Below is just code, and bad code at that. Ignore it.
 /////////////////////////////////////////////////////////////////////////////////
 
-
+/////////////////////////////////////////////////////////////////////////////////
+//
+// OneOnOneStatCollector
+//
+// This class contains all of the knowledge for parsing the one on one stats
+// spreadsheet, collating the stats from a series of CalendarEvents, and then
+// updating the stats spreadsheet.
 class OneOnOneStatCollector {
+
+  // Given a Spreadsheet, constructs & populates the stats collector based on the
+  // data in that spreadsheet.
+  //
+  // Arguments:
+  //   sheet: Spreadsheet containing 1:1 information. Stored in the class.
   constructor(sheet) {
-    // Map of '1:1 partner => [days since last 1:1 (`freqMap`), sla]
+    this.sheet = sheet;
+
+    // Map of '1:1 partner => [days since last 1:1 (`freqMap`), frequency SLO]
     this.oneOnOneFreq = {};
-    this._populateOneOnOneFreq(sheet)
+    this._populateOneOnOneFreq()
   }
 
-  // Returns the oneOnOneFreq dictionary populated with data from the Stats Sheet.
-  // '1:1 partner' => [undef, 1:1 frequency SLO]
-  _populateOneOnOneFreq(sheet) {
-    var r = sheet.getRange('A2:C200');
+  // Populates the oneOnOneFreq dictionary with data from the Stats Sheet.
+  //
+  _populateOneOnOneFreq() {
+    var r = this.sheet.getRange('A2:C200');
 
     var freq = {}
 
@@ -68,9 +82,12 @@ class OneOnOneStatCollector {
     this.oneOnOneFreq = freq;
   }
 
-  // This extracts out the 1:1 partner name and updates it with the minimum gap since the last 1:1.
-  // Skips any events in the future.
-  // event: CalendarEvent
+  // Given a CalendarEvent that is assumed to be a 1:1, this extracts out the 1:1 partner name and
+  // updates the statistics for 1:1s with that person.
+  // This skips any events in the future.
+  //
+  // Arguments:
+  //   event: CalendarEvent
   trackOneOnOne(event) {
     const now = new Date();
     const guest = cleanGuestEmail(getOneOnOneGuestEmail(event));
@@ -98,22 +115,23 @@ class OneOnOneStatCollector {
     //Logger.log('Most recent 1:1 with ' + guest + ': ' + this.oneOnOneFreq[guest]);
   }
 
-  // Takes a Spreadsheet and populates it with the 1:1 statistics
-  updateStatsSheet(sheet) {
+  // Populates the stored Spreadsheet with the statistics stored in this class.
+  //
+  updateStatsSheet() {
     var freqEntries = Object.entries(this.oneOnOneFreq);
 
     // Set and freeze the column headers
-    var r = sheet.getRange(ONE_ON_ONE_HDR_RANGE);
+    var r = this.sheet.getRange(ONE_ON_ONE_HDR_RANGE);
     r.setValues(ONE_ON_ONE_STATS_HDRS);
     r.setFontWeight('bold');
-    sheet.setFrozenRows(1);
-    sheet.autoResizeColumns(1, 4);
+    this.sheet.setFrozenRows(1);
+    this.sheet.autoResizeColumns(1, 4);
 
     // Generate the range
     var range = ['A2:D', freqEntries.length + 1].join("");
 
     // Populate the data
-    r = sheet.getRange(range);
+    r = this.sheet.getRange(range);
 
     //r.setValues(Object.entries(flattenFreq(oneOnOneFreq)));
     r.setValues(flattenFreq(this.oneOnOneFreq));
@@ -122,6 +140,9 @@ class OneOnOneStatCollector {
     r.sort({column: 4, ascending: false});
   }
 }
+
+// End OneOnOneStatCollector
+/////////////////////////////////////////////////////////////////////////////////
 
 // Adds a custom menu item to run the script
 function onOpen() {
@@ -183,7 +204,7 @@ function reportStats(events) {
     Logger.log(tag + ': ' + count);
   }
 
-  stats.updateStatsSheet(getStatsSheet());
+  stats.updateStatsSheet();
 }
 
 // Given and event with two guests, returns the guest email that isn't OWNER_EMAIL
