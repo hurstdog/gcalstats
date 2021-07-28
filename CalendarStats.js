@@ -171,7 +171,7 @@ class OneOnOneStatCollector {
     r.sort({column: ONE_ON_ONE_SORT_COLUMN, ascending: false});
 
     // Resize columns last, to match the data we just added.
-    this.sheet.autoResizeColumns(1, 4);
+    this.sheet.autoResizeColumns(1, ONE_ON_ONE_STATS_HDRS[0].length);
   }
 
   // Returns the email frequency data structure as an array of arrays, ready to
@@ -380,3 +380,4 @@ function getDateByDays(days) {
   var now = new Date();
   return new Date(now.getTime() + (days * 24 * 60 * 60 * 1000));
 }
+
