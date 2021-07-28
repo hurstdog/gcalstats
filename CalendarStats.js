@@ -37,9 +37,93 @@ const ONE_ON_ONE_STATS_HDRS = [["Who",
 /////////////////////////////////////////////////////////////////////////////////
 
 
-/**
- * Adds a custom menu item to run the script
- */
+class OneOnOneStatCollector {
+  constructor(sheet) {
+    // Map of '1:1 partner => [days since last 1:1 (`freqMap`), sla]
+    this.oneOnOneFreq = {};
+    this._populateOneOnOneFreq(sheet)
+  }
+
+  // Returns the oneOnOneFreq dictionary populated with data from the Stats Sheet.
+  // '1:1 partner' => [undef, 1:1 frequency SLO]
+  _populateOneOnOneFreq(sheet) {
+    var r = sheet.getRange('A2:C200');
+
+    var freq = {}
+
+    // Loop over the range, populating the frequency map as we go.
+    for (const row of r.getValues()) {
+      if (row[0] == "") {
+        break;
+      }
+      var sla = "";
+      if (row[2]) {
+        sla = row[2];
+      };
+      freq[row[0]] = [row[1], sla];
+      //Logger.log(row[0] + ' = [' + freq[row[0]] + ']');
+    }
+
+    //printFreq(freq);
+    this.oneOnOneFreq = freq;
+  }
+
+  // This extracts out the 1:1 partner name and updates it with the minimum gap since the last 1:1.
+  // Skips any events in the future.
+  // event: CalendarEvent
+  trackOneOnOne(event) {
+    const now = new Date();
+    const guest = cleanGuestEmail(getOneOnOneGuestEmail(event));
+
+    var diffMs = now - event.getStartTime();
+    if (diffMs < 0) {
+      //Logger.log(event.getStartTime() + ' is in the future so I\'m skipping it');
+      return;
+    }
+
+    const daysSinceEvent = Math.floor(diffMs / 1000 / 60 / 60 / 24);
+
+    if (guest in this.oneOnOneFreq) {
+      // Only update if this event is newer
+      if (this.oneOnOneFreq[guest][0] > daysSinceEvent) {
+        this.oneOnOneFreq[guest][0] = daysSinceEvent;
+      }
+    } else {
+      if (this.oneOnOneFreq[guest] == undefined) {
+        this.oneOnOneFreq[guest] = []
+      }
+      this.oneOnOneFreq[guest][0] = daysSinceEvent;
+    }
+
+    //Logger.log('Most recent 1:1 with ' + guest + ': ' + this.oneOnOneFreq[guest]);
+  }
+
+  // Takes a Spreadsheet and populates it with the 1:1 statistics
+  updateStatsSheet(sheet) {
+    var freqEntries = Object.entries(this.oneOnOneFreq);
+
+    // Set and freeze the column headers
+    var r = sheet.getRange(ONE_ON_ONE_HDR_RANGE);
+    r.setValues(ONE_ON_ONE_STATS_HDRS);
+    r.setFontWeight('bold');
+    sheet.setFrozenRows(1);
+    sheet.autoResizeColumns(1, 4);
+
+    // Generate the range
+    var range = ['A2:D', freqEntries.length + 1].join("");
+
+    // Populate the data
+    r = sheet.getRange(range);
+
+    //r.setValues(Object.entries(flattenFreq(oneOnOneFreq)));
+    r.setValues(flattenFreq(this.oneOnOneFreq));
+
+    // Sort the data
+    r.sort({column: 4, ascending: false});
+  }
+}
+
+// Adds a custom menu item to run the script
 function onOpen() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ss.addMenu('Calendar Script',
@@ -69,7 +153,7 @@ function reportStats(events) {
   // 'tag name' => count
   var tags = {};
   // '1:1 partner' => [days since last 1:1, 1:1 frequency SLO]
-  var oneOnOneFreq = getOneOnOneFreq();
+  var stats = new OneOnOneStatCollector(getStatsSheet());
   for (const event of events) {
     var tag = extractTag(event);
     var guests = event.getGuestList(true);
@@ -81,7 +165,7 @@ function reportStats(events) {
       blockedTime++;
     } else if (guests.length == 2) {
       oneOnOnes++;
-      trackOneOnOne(oneOnOneFreq, event);
+      stats.trackOneOnOne(event);
       //Logger.log('Found a 1:1 with guests! ' + event.getTitle());
       //printGuests(guests);
     } else {
@@ -99,37 +183,7 @@ function reportStats(events) {
     Logger.log(tag + ': ' + count);
   }
 
-  updateStatsSheet(oneOnOneFreq);
-}
-
-// Given a map of '1:1 partner => [days since last 1:1 (`freqMap`), sla] and a CalendarEvent (`event`)
-// This extracts out the 1:1 partner name and updates it with the minimum gap since the last 1:1.
-// Skips any events in the future.
-function trackOneOnOne(freqMap, event) {
-  const now = new Date();
-  const guest = cleanGuestEmail(getOneOnOneGuestEmail(event));
-
-  var diffMs = now - event.getStartTime();
-  if (diffMs < 0) {
-    //Logger.log(event.getStartTime() + ' is in the future so I\'m skipping it');
-    return;
-  }
-
-  const daysSinceEvent = Math.floor(diffMs / 1000 / 60 / 60 / 24);
-  
-  if (guest in freqMap) {
-    // Only update if this event is newer
-    if (freqMap[guest][0] > daysSinceEvent) {
-      freqMap[guest][0] = daysSinceEvent;
-    }
-  } else {
-    if (freqMap[guest] == undefined) {
-      freqMap[guest] = []
-    }
-    freqMap[guest][0] = daysSinceEvent;
-  }
-
-  //Logger.log('Most recent 1:1 with ' + guest + ': ' + freqMap[guest]);
+  stats.updateStatsSheet(getStatsSheet());
 }
 
 // Given and event with two guests, returns the guest email that isn't OWNER_EMAIL
@@ -156,32 +210,6 @@ function cleanGuestEmail(email) {
   return email.replace('@' + OWNER_DOMAIN, '');
 }
 
-// Takes a map of email -> days since last 1:1 and populates ONE_ON_ONE_STATS_SHEET
-// with the data.
-function updateStatsSheet(oneOnOneFreq) {
-  var sheet = getStatsSheet();
-  var freqEntries = Object.entries(oneOnOneFreq);
-
-  // Set and freeze the column headers
-  var r = sheet.getRange(ONE_ON_ONE_HDR_RANGE);
-  r.setValues(ONE_ON_ONE_STATS_HDRS);
-  r.setFontWeight('bold');
-  sheet.setFrozenRows(1);
-  sheet.autoResizeColumns(1, 4);
-
-  // Generate the range
-  var range = ['A2:D', freqEntries.length + 1].join("");
-
-  // Populate the data
-  r = sheet.getRange(range);
-
-  //r.setValues(Object.entries(flattenFreq(oneOnOneFreq)));
-  r.setValues(flattenFreq(oneOnOneFreq));
-
-  // Sort the data
-  r.sort({column: 4, ascending: false});
-}
-
 // Returns the Spreadsheet object used to store statistics
 function getStatsSheet() {
   var sheet =  SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONE_ON_ONE_STATS_SHEET);
@@ -194,39 +222,12 @@ function getStatsSheet() {
   return sheet;
 }
 
-// Returns the oneOnOneFreq dictionary populated with data from the Stats Sheet.
-// '1:1 partner' => [undef, 1:1 frequency SLO]
-function getOneOnOneFreq() {
-  var sheet = getStatsSheet();
-
-  var r = sheet.getRange('A2:C200');
-
-  var freq = {}
-
-  // Loop over the range, populating the frequency map as we go.
-  for (const row of r.getValues()) {
-    if (row[0] == "") {
-      break;
-    }
-    var sla = "";
-    if (row[2]) {
-      sla = row[2];
-    };
-    freq[row[0]] = [row[1], sla];
-    Logger.log(row[0] + ' = [' + freq[row[0]] + ']');
-  }
-
-  printFreq(freq);
-
-  return freq;
-}
-
 function flattenFreq(freq) {
   var f = [];
   for (const [k, v] of Object.entries(freq)) {
     f.push([k, v[0], v[1], v[0] - v[1]]);
   }
-  printFlatFreq(f);
+  //printFlatFreq(f);
   return f;
 }
 
@@ -265,12 +266,6 @@ function printFreq(freq) {
   }
 }
 
-function printFlatFreq(freq) {
-  Logger.log('Printing the flat freq');
-  for (const row of freq) {
-    Logger.log('row is [' + row + ']');
-  }
-}
 function printFlatFreq(freq) {
   Logger.log('Printing the flat freq');
   for (const row of freq) {
