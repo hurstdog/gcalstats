@@ -24,12 +24,13 @@ const RANGE_DAYS_FUTURE = 30;
 // Name of the sheet to show the results.
 // Will create if it doesn't exist, otherwise will re-use the existing.
 const ONE_ON_ONE_STATS_SHEET = '1:1 Stats';
-const ONE_ON_ONE_HDR_RANGE = "A1:D1";
+const ONE_ON_ONE_HDR_RANGE = "A1:E1";
 
 // Headers for the stats rows. Note that this is the order needed in the stats
 // frequency dict as well.
 const ONE_ON_ONE_STATS_HDRS = [["Who",
                                 "Time Since Last 1:1",
+                                "Time Until next 1:1",
                                 "SLO",
                                 "Overdue"]];
 
@@ -53,29 +54,38 @@ class OneOnOneStatCollector {
   constructor(sheet) {
     this.sheet = sheet;
 
-    // Map of '1:1 partner => [days since last 1:1 (`freqMap`), frequency SLO]
+    // Map of '1:1 partner email' => [
+    //        days since last 1:1,
+    //        days until next 1:1,
+    //        frequency SLO,
+    //        ]
     this.oneOnOneFreq = {};
     this._populateOneOnOneFreq()
   }
 
   // Populates the oneOnOneFreq dictionary with data from the Stats Sheet.
+  // NOTE: This assumes that the sheet has the columns in ONE_ON_ONE_STATS_HDRS,
+  //  in that order.
   //
   _populateOneOnOneFreq() {
-    var r = this.sheet.getRange('A2:C200');
+    var r = this.sheet.getRange('A2:D200');
 
     var freq = {}
 
     // Loop over the range, populating the frequency map as we go.
     for (const row of r.getValues()) {
-      if (row[0] == "") {
+      var email = row[0];
+      var lastO = row[1];
+      var nextO = row[2];
+      var slo = row[3];
+      var over = row[4];
+
+      if (email == "") {
         break;
       }
-      var sla = "";
-      if (row[2]) {
-        sla = row[2];
-      };
-      freq[row[0]] = [row[1], sla];
-      //Logger.log(row[0] + ' = [' + freq[row[0]] + ']');
+
+      freq[email] = [lastO, nextO, slo, over];
+      //Logger.log(email + ' = [' + freq[email] + ']');
     }
 
     //this._printFreq(freq);
@@ -84,7 +94,6 @@ class OneOnOneStatCollector {
 
   // Given a CalendarEvent that is assumed to be a 1:1, this extracts out the 1:1 partner name and
   // updates the statistics for 1:1s with that person.
-  // This skips any events in the future.
   //
   // TODO: Collect stats on 1:1 frequency as well.
   //
@@ -94,25 +103,39 @@ class OneOnOneStatCollector {
     const now = new Date();
     const guest = cleanGuestEmail(getOneOnOneGuestEmail(event));
 
-    var diffMs = now - event.getStartTime();
-    if (diffMs < 0) {
-      //Logger.log(event.getStartTime() + ' is in the future so I\'m skipping it');
-      return;
+    // Temp variables so I don't have to spend all my mental energy with array indices
+    var guestStats = this.oneOnOneFreq[guest]
+    if (guestStats == undefined) {
+      guestStats = []
     }
 
-    const daysSinceEvent = Math.floor(diffMs / 1000 / 60 / 60 / 24);
+    var lastOneOnOneDelta = guestStats[0]; // days in the past
+    var nextOneOnOneDelta = guestStats[1]; // days in the future
 
-    if (guest in this.oneOnOneFreq) {
-      // Only update if this event is newer
-      if (this.oneOnOneFreq[guest][0] > daysSinceEvent) {
-        this.oneOnOneFreq[guest][0] = daysSinceEvent;
+    const diffMs = now - event.getStartTime();
+    const daysToEvent = Math.floor(diffMs / 1000 / 60 / 60 / 24);
+
+    if (diffMs > 0) {
+      // Past events
+      // Update the last 1:1 time if
+      //    a) it hasn't been defined or
+      //    b) it's farther away than the current event.
+      if (lastOneOnOneDelta == undefined || lastOneOnOneDelta > daysToEvent) {
+        lastOneOnOneDelta = daysToEvent;
       }
     } else {
-      if (this.oneOnOneFreq[guest] == undefined) {
-        this.oneOnOneFreq[guest] = []
+      // Future events
+      // Update the last 1:1 time if
+      //    a) it hasn't been defined or
+      //    b) it's farther away (more negative) than the current event.
+      if (nextOneOnOneDelta == undefined || nextOneOnOneDelta < daysToEvent) {
+        nextOneOnOneDelta = daysToEvent;
       }
-      this.oneOnOneFreq[guest][0] = daysSinceEvent;
     }
+
+    guestStats[0] = lastOneOnOneDelta;
+    guestStats[1] = nextOneOnOneDelta;
+    this.oneOnOneFreq[guest] = guestStats;
 
     //Logger.log('Most recent 1:1 with ' + guest + ': ' + this.oneOnOneFreq[guest]);
   }
@@ -127,10 +150,9 @@ class OneOnOneStatCollector {
     r.setValues(ONE_ON_ONE_STATS_HDRS);
     r.setFontWeight('bold');
     this.sheet.setFrozenRows(1);
-    this.sheet.autoResizeColumns(1, 4);
 
     // Generate the range
-    var range = ['A2:D', freqEntries.length + 1].join("");
+    var range = ['A2:E', freqEntries.length + 1].join("");
 
     // Populate the data
     r = this.sheet.getRange(range);
@@ -139,16 +161,22 @@ class OneOnOneStatCollector {
 
     // Sort the data
     r.sort({column: 4, ascending: false});
+
+    // Resize columns last, to match the data we just added.
+    this.sheet.autoResizeColumns(1, 4);
   }
 
   _flattenFreq(freq) {
     var f = [];
     for (const [k, v] of Object.entries(freq)) {
-      if (v[1]) {
-        f.push([k, v[0], v[1], v[0] - v[1]]);
-      } else {
-        f.push([k, v[0], v[1], ""]);
-      }
+
+      var guest = k || 'none?';
+      var lastO = v[0] || 'no last';
+      var nextO = v[1] || 'no next';
+      var slo = v[2] || 'no slo';
+      var outage = lastO - slo;
+
+      f.push([guest, lastO, nextO, slo, outage]);
     }
     //this._printFlatFreq(f);
     return f;
@@ -260,13 +288,14 @@ function cleanGuestEmail(email) {
   return email.replace('@' + OWNER_DOMAIN, '');
 }
 
-// Returns the Spreadsheet object used to store statistics
+// Returns the Spreadsheet object used to store statistics, and creates it if one
+// doesn't exist yet.
 function getStatsSheet() {
   var sheet =  SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONE_ON_ONE_STATS_SHEET);
   if (sheet == null) {
     SpreadsheetApp.getActiveSpreadsheet().insertSheet();
     SpreadsheetApp.getActiveSpreadsheet().renameActiveSheet(ONE_ON_ONE_STATS_SHEET);
-    sheet = SpreadsheetApp.getActiveSpreadsheet();
+    sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   }
 
   return sheet;
