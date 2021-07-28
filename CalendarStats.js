@@ -157,7 +157,7 @@ class OneOnOneStatCollector {
     // Populate the data
     r = this.sheet.getRange(range);
 
-    r.setValues(this._flattenFreq(this.oneOnOneFreq));
+    r.setValues(this.getFlatFreq());
 
     // Sort the data
     r.sort({column: 4, ascending: false});
@@ -166,17 +166,30 @@ class OneOnOneStatCollector {
     this.sheet.autoResizeColumns(1, 4);
   }
 
-  _flattenFreq(freq) {
+  // Returns the email frequency data structure as an array of arrays, ready to
+  // pass to Range.setValues()
+  //
+  getFlatFreq() {
     var f = [];
-    for (const [k, v] of Object.entries(freq)) {
+    for (const [k, v] of Object.entries(this.oneOnOneFreq)) {
 
-      var guest = k || 'none?';
-      var lastO = v[0] || 'no last';
-      var nextO = v[1] || 'no next';
-      var slo = v[2] || 'no slo';
-      var outage = lastO - slo;
+      var guest = k;
+      var last = v[0];
+      var next = v[1];
+      var slo = v[2];
+      var outslo = last - slo;
 
-      f.push([guest, lastO, nextO, slo, outage]);
+      // If we don't have useful variables to calculate how far out of SLO we are,
+      // try to show something reasonable.
+      if (slo == undefined) {
+        outslo = "";
+      } else {
+        if (last == undefined) {
+          outslo = slo;
+        }
+      }
+
+      f.push([guest, last, next, slo, outslo]);
     }
     //this._printFlatFreq(f);
     return f;
