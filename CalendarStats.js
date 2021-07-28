@@ -11,18 +11,27 @@
 // to your preferences.
 
 // Your Google Calendar username and domain.
-var OWNER_USERNAME = 'andrew';
-var OWNER_DOMAIN = 'hurstdog.org';
-var OWNER_EMAIL = OWNER_USERNAME + '@' + OWNER_DOMAIN;
-var MEETING_TAG = 'TAG: ';
+const OWNER_USERNAME = 'andrew';
+const OWNER_DOMAIN = 'hurstdog.org';
+const OWNER_EMAIL = OWNER_USERNAME + '@' + OWNER_DOMAIN;
+const MEETING_TAG = 'TAG: ';
 
 // Counting days from today, forward or backwards.
 // Note that both of these values should be positive
-var RANGE_DAYS_PAST = 30;
-var RANGE_DAYS_FUTURE = 30;
+const RANGE_DAYS_PAST = 30;
+const RANGE_DAYS_FUTURE = 30;
 
-// Name of the sheet to show the results
-var ONE_ON_ONE_STATS_SHEET = '1:1 Stats';
+// Name of the sheet to show the results.
+// Will create if it doesn't exist, otherwise will re-use the existing.
+const ONE_ON_ONE_STATS_SHEET = '1:1 Stats';
+const ONE_ON_ONE_HDR_RANGE = "A1:D1";
+
+// Headers for the stats rows. Note that this is the order needed in the stats
+// frequency dict as well.
+const ONE_ON_ONE_STATS_HDRS = [["Who",
+                                "Time Since Last 1:1",
+                                "SLO",
+                                "Overdue"]];
 
 // End Constants. Below is just code, and bad code at that. Ignore it.
 /////////////////////////////////////////////////////////////////////////////////
@@ -59,8 +68,8 @@ function reportStats(events) {
 
   // 'tag name' => count
   var tags = {};
-  // '1:1 partner' => days since last 1:1
-  var oneOnOneFreq = {};
+  // '1:1 partner' => [days since last 1:1, 1:1 frequency SLO]
+  var oneOnOneFreq = getOneOnOneFreq();
   for (const event of events) {
     var tag = extractTag(event);
     var guests = event.getGuestList(true);
@@ -72,7 +81,7 @@ function reportStats(events) {
       blockedTime++;
     } else if (guests.length == 2) {
       oneOnOnes++;
-      trackLatestOneOnOne(oneOnOneFreq, event);
+      trackOneOnOne(oneOnOneFreq, event);
       //Logger.log('Found a 1:1 with guests! ' + event.getTitle());
       //printGuests(guests);
     } else {
@@ -93,26 +102,31 @@ function reportStats(events) {
   updateStatsSheet(oneOnOneFreq);
 }
 
-// Given a map of '1:1 partner => days since last 1:1 (`freqMap`), and a CalendarEvent (`event`)
+// Given a map of '1:1 partner => [days since last 1:1 (`freqMap`), sla] and a CalendarEvent (`event`)
 // This extracts out the 1:1 partner name and updates it with the minimum gap since the last 1:1.
 // Skips any events in the future.
-function trackLatestOneOnOne(freqMap, event) {
-  var now = new Date()
+function trackOneOnOne(freqMap, event) {
+  const now = new Date();
+  const guest = cleanGuestEmail(getOneOnOneGuestEmail(event));
+
   var diffMs = now - event.getStartTime();
   if (diffMs < 0) {
     //Logger.log(event.getStartTime() + ' is in the future so I\'m skipping it');
     return;
   }
 
-  var daysSinceEvent = Math.floor(diffMs / 1000 / 60 / 60 / 24);
-  var guest = cleanGuestEmail(getOneOnOneGuestEmail(event));
+  const daysSinceEvent = Math.floor(diffMs / 1000 / 60 / 60 / 24);
+  
   if (guest in freqMap) {
-    if (freqMap[guest] > daysSinceEvent) {
-      freqMap[guest] = daysSinceEvent;
+    // Only update if this event is newer
+    if (freqMap[guest][0] > daysSinceEvent) {
+      freqMap[guest][0] = daysSinceEvent;
     }
-    // else ignore it, we already have a more recent event
   } else {
-    freqMap[guest] = daysSinceEvent;
+    if (freqMap[guest] == undefined) {
+      freqMap[guest] = []
+    }
+    freqMap[guest][0] = daysSinceEvent;
   }
 
   //Logger.log('Most recent 1:1 with ' + guest + ': ' + freqMap[guest]);
@@ -145,25 +159,75 @@ function cleanGuestEmail(email) {
 // Takes a map of email -> days since last 1:1 and populates ONE_ON_ONE_STATS_SHEET
 // with the data.
 function updateStatsSheet(oneOnOneFreq) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONE_ON_ONE_STATS_SHEET);
-  
+  var sheet = getStatsSheet();
   var freqEntries = Object.entries(oneOnOneFreq);
 
   // Set and freeze the column headers
-  var r = sheet.getRange("A1:B1");
-  var hdrs = [["Who", "Time Since Last 1:1"]];
-  r.setValues(hdrs);
+  var r = sheet.getRange(ONE_ON_ONE_HDR_RANGE);
+  r.setValues(ONE_ON_ONE_STATS_HDRS);
+  r.setFontWeight('bold');
   sheet.setFrozenRows(1);
+  sheet.autoResizeColumns(1, 4);
 
   // Generate the range
-  var range = ['A2:B', freqEntries.length + 1].join("");
+  var range = ['A2:D', freqEntries.length + 1].join("");
 
   // Populate the data
   r = sheet.getRange(range);
-  r.setValues(Object.entries(oneOnOneFreq));
+
+  //r.setValues(Object.entries(flattenFreq(oneOnOneFreq)));
+  r.setValues(flattenFreq(oneOnOneFreq));
 
   // Sort the data
-  r.sort({column: 2, ascending: false});
+  r.sort({column: 4, ascending: false});
+}
+
+// Returns the Spreadsheet object used to store statistics
+function getStatsSheet() {
+  var sheet =  SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONE_ON_ONE_STATS_SHEET);
+  if (sheet == null) {
+    SpreadsheetApp.getActiveSpreadsheet().insertSheet();
+    SpreadsheetApp.getActiveSpreadsheet().renameActiveSheet(ONE_ON_ONE_STATS_SHEET);
+    sheet = SpreadsheetApp.getActiveSpreadsheet();
+  }
+
+  return sheet;
+}
+
+// Returns the oneOnOneFreq dictionary populated with data from the Stats Sheet.
+// '1:1 partner' => [undef, 1:1 frequency SLO]
+function getOneOnOneFreq() {
+  var sheet = getStatsSheet();
+
+  var r = sheet.getRange('A2:C200');
+
+  var freq = {}
+
+  // Loop over the range, populating the frequency map as we go.
+  for (const row of r.getValues()) {
+    if (row[0] == "") {
+      break;
+    }
+    var sla = "";
+    if (row[2]) {
+      sla = row[2];
+    };
+    freq[row[0]] = [row[1], sla];
+    Logger.log(row[0] + ' = [' + freq[row[0]] + ']');
+  }
+
+  printFreq(freq);
+
+  return freq;
+}
+
+function flattenFreq(freq) {
+  var f = [];
+  for (const [k, v] of Object.entries(freq)) {
+    f.push([k, v[0], v[1], v[0] - v[1]]);
+  }
+  printFlatFreq(f);
+  return f;
 }
 
 // Increments element `tag` in dictionary `dict`
@@ -190,6 +254,28 @@ function extractTag(event) {
     }
   }
   return tag;
+}
+
+function printFreq(freq) {
+  Logger.log('Printing the 1:1 frequency');
+  for (const [k, v] of Object.entries(freq)) {
+    if (k && v) {
+      Logger.log(k + ' -> [' + v + ']');
+    }
+  }
+}
+
+function printFlatFreq(freq) {
+  Logger.log('Printing the flat freq');
+  for (const row of freq) {
+    Logger.log('row is [' + row + ']');
+  }
+}
+function printFlatFreq(freq) {
+  Logger.log('Printing the flat freq');
+  for (const row of freq) {
+    Logger.log('row is [' + row + ']');
+  }
 }
 
 function printGuests(guests) {
