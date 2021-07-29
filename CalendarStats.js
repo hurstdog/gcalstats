@@ -40,6 +40,21 @@ const ONE_ON_ONE_LIST_HDRS = [["Who",
 // Which column to sort the results by. This corresponds to ONE_ON_ONE_LIST_HDRS.
 const ONE_ON_ONE_LIST_SORT_COLUMN = 5;
 
+// Name of the sheet to show the 1:1 stats results.
+// Will create if it doesn't exist, otherwise will re-use the existing.
+const MEETING_STATS_SHEET = "Meeting Stats";
+const MEETING_STATS_HDR_RANGE = "A1:B1";
+const MEETING_STATS_DATA_RANGE_COLS = "A2:B";
+const MEETING_STATS_DATA_RANGE_MAX = "A2:B200";
+
+// Headers for the stats rows. Note that this is the order needed in the stats
+// frequency dict as well.
+const MEETING_STATS_HDRS = [["Meeting Type",
+                             "Num Events"]];
+
+// Which column to sort the results by. This corresponds to MEETING_STATS_HDRS.
+const MEETING_STATS_SORT_COLUMN = 2;
+
 // End Constants. Below is just code, and bad code at that. Ignore it.
 /////////////////////////////////////////////////////////////////////////////////
 
@@ -263,8 +278,7 @@ function reportStats(events) {
 
   // 'tag name' => count
   var tags = {};
-  // '1:1 partner' => [days since last 1:1, 1:1 frequency SLO]
-  var stats = new OneOnOneStatCollector(getStatsSheet());
+  var stats = new OneOnOneStatCollector(getListSheet());
   for (const event of events) {
     var tag = extractTag(event);
     var guests = event.getGuestList(true);
@@ -286,15 +300,8 @@ function reportStats(events) {
     }
   }
 
-  Logger.log('Total: ' + numEvents);
-  Logger.log('1:1s: ' + oneOnOnes);
-  Logger.log('Blocked Time: ' + blockedTime);
-  Logger.log('Meetings: ' + meetings);
-  for (const [tag, count] of Object.entries(tags)) {
-    Logger.log(tag + ': ' + count);
-  }
-
   stats.updateStatsSheet();
+  updateStatsSheet(numEvents, oneOnOnes, blockedTime, meetings, tags);
 }
 
 // Given and event with two guests, returns the guest email that isn't OWNER_EMAIL
@@ -321,9 +328,9 @@ function cleanGuestEmail(email) {
   return email.replace('@' + OWNER_DOMAIN, '');
 }
 
-// Returns the Spreadsheet object used to store statistics, and creates it if one
+// Returns the Spreadsheet object used to store 1:1 lists, and creates it if one
 // doesn't exist yet.
-function getStatsSheet() {
+function getListSheet() {
   var sheet =  SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONE_ON_ONE_LIST_SHEET);
   if (sheet == null) {
     SpreadsheetApp.getActiveSpreadsheet().insertSheet();
@@ -332,6 +339,56 @@ function getStatsSheet() {
   }
 
   return sheet;
+}
+
+// Returns the Spreadsheet object used to store meeting stats, and creates it if one
+// doesn't exist yet.
+function getStatsSheet() {
+  var sheet =  SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MEETING_STATS_SHEET);
+  if (sheet == null) {
+    SpreadsheetApp.getActiveSpreadsheet().insertSheet();
+    SpreadsheetApp.getActiveSpreadsheet().renameActiveSheet(MEETING_STATS_SHEET);
+    sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  }
+
+  return sheet;
+}
+
+// Populates the stored Spreadsheet with the meeting statistics stored in this class.
+//
+function updateStatsSheet(total, oneOnOnes, blockedTime, meetings, taggedMeetings) {
+  const sheet = getStatsSheet();
+
+  var stats = [
+    ["1:1s", oneOnOnes],
+    ["Total", total],
+    ["Blocked Time", blockedTime],
+    ["Meetings", meetings]
+  ];
+
+  for (const [tag, count] of Object.entries(taggedMeetings)) {
+    stats.push([tag, count]);
+  }
+
+  // Set and freeze the column headers
+  var r = sheet.getRange(MEETING_STATS_HDR_RANGE);
+  r.setValues(MEETING_STATS_HDRS);
+  r.setFontWeight('bold');
+  sheet.setFrozenRows(1);
+
+  // Generate the range
+  const range = [MEETING_STATS_DATA_RANGE_COLS, stats.length + 1].join("");
+
+  // Populate the data
+  r = sheet.getRange(range);
+
+  r.setValues(stats);
+
+  // Sort the data
+  r.sort({column: MEETING_STATS_SORT_COLUMN, ascending: true});
+
+  // Resize columns last, to match the data we just added.
+  sheet.autoResizeColumns(1, MEETING_STATS_HDRS[0].length);
 }
 
 // Given a CalendarEvent, will read the description and return any of the text
