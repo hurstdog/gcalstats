@@ -115,6 +115,15 @@ class OneOnOneListCollector {
     this.oneOnOneFreq = freq;
   }
 
+  // Given a CalendarEvent, this will return true if it's a 1:1, false otherwise.
+  //
+  // Argument:
+  //   event: CalendarEvent
+  isOneOnOne(event) {
+    var guests = event.getGuestList(true);
+    return guests.length == 2;
+  }
+
   // Given a CalendarEvent that is assumed to be a 1:1, this extracts out the 1:1 partner name and
   // updates the statistics for 1:1s with that person.
   //
@@ -251,6 +260,77 @@ class OneOnOneListCollector {
 // End OneOnOneListCollector
 /////////////////////////////////////////////////////////////////////////////////
 
+/////////////////////////////////////////////////////////////////////////////////
+//
+// MeetingStatsCollector
+//
+// This class contains all of the knowledge for parsing meetings and tracking
+// some basic statistics about them.
+class MeetingStatsCollector {
+
+  // Constructs the MeetingStatsCollector.
+  //
+  // Arguments:
+  //   sheet: Spreadsheet to put the results into. Stored in the class.
+  constructor(sheet) {
+    this.sheet = sheet;
+
+    // Map of 'Meeting type' => count
+    this.meetings = {};
+  }
+
+  // Given a CalendarEvent, will extract basic information about what type of event it
+  // is and store the statistics in this class.
+  //
+  // Arguments:
+  //   event: A Calendar Event
+  trackEvent(event) {
+    var tag = extractTag(event);
+    var guests = event.getGuestList(true);
+
+    if (tag != null) {
+      inc(this.meetings, tag);
+    } else if (guests.length == 0) {
+      inc(this.meetings, "Blocked Time");
+    } else if (guests.length == 1 && guests[0].getEmail() == OWNER_EMAIL) {
+      inc(this.meetings, "Blocked Time");
+    } else if (guests.length == 2) {
+      inc(this.meetings, "1:1s");
+    } else {
+      inc(this.meetings, "Meetings");;
+    }
+  }
+
+  // Populates the stored Spreadsheet with the meeting statistics stored in this class.
+  //
+  //updateStatsSheet(total, oneOnOnes, blockedTime, meetings, taggedMeetings) {
+  updateStatsSheet() {
+    var stats = [];
+    for (const [tag, count] of Object.entries(this.meetings)) {
+      stats.push([tag, count]);
+    }
+    // Set and freeze the column headers
+    var r = this.sheet.getRange(MEETING_STATS_HDR_RANGE);
+    r.setValues(MEETING_STATS_HDRS);
+    r.setFontWeight('bold');
+    this.sheet.setFrozenRows(1);
+
+    // Generate the range
+    const range = [MEETING_STATS_DATA_RANGE_COLS, stats.length + 1].join("");
+    r = this.sheet.getRange(range);
+    r.setValues(stats);
+
+    // Sort the data
+    r.sort({column: MEETING_STATS_SORT_COLUMN, ascending: true});
+
+    // Resize columns last, to match the data we just added.
+    this.sheet.autoResizeColumns(1, MEETING_STATS_HDRS[0].length);
+  }
+}
+
+// End MeetingStatsCollector
+/////////////////////////////////////////////////////////////////////////////////
+
 // Adds a custom menu item to run the script
 function onOpen() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -265,46 +345,26 @@ function ListMeetings() {
   reportStats(events)
 }
 
-// Reports statistics on the CalendarEvent[] passed in to `events`, by percentage of time broken down.
-// 1:1s
-// Group meetings
-// Focused time?
+// Collects statistics on 1:1s and general meetings on the CalendarEvent[] passed in.
+//
+// Arguments:
+//   events: A list of CalendarEvent
 function reportStats(events) {
-  var numEvents = events.length;
-
-  var oneOnOnes = 0;
-  var blockedTime = 0;
-  var meetings = 0;
-
-  // 'tag name' => count
-  var tags = {};
   var oneOnOneList = new OneOnOneListCollector(getListSheet());
+  var stats = new MeetingStatsCollector(getStatsSheet());
   for (const event of events) {
-    var tag = extractTag(event);
-    var guests = event.getGuestList(true);
-    if (tag != null) {
-      inc(tags, tag);
-    } else if (guests.length == 0) {
-      blockedTime++;
-    } else if (guests.length == 1 && guests[0].getEmail() == OWNER_EMAIL) {
-      blockedTime++;
-    } else if (guests.length == 2) {
-      oneOnOnes++;
+    if (oneOnOneList.isOneOnOne(event)) {
       oneOnOneList.trackOneOnOne(event);
-      //Logger.log('Found a 1:1 with guests! ' + event.getTitle());
-      //printGuests(guests);
-    } else {
-      meetings++;
-      //Logger.log('OTHER Title: ' + event.getTitle());
-      //printGuests(guests)
     }
+    stats.trackEvent(event);
   }
 
   oneOnOneList.updateListSheet();
-  updateStatsSheet(numEvents, oneOnOnes, blockedTime, meetings, tags);
+  //stats.updateStatsSheet(numEvents, oneOnOnes, blockedTime, meetings, tags);
+  stats.updateStatsSheet();
 }
 
-// Given and event with two guests, returns the guest email that isn't OWNER_EMAIL
+// Given an event with two guests, returns the guest email that isn't OWNER_EMAIL
 // Prints an error and returns null on lists that don't contain two entries.
 function getOneOnOneGuestEmail(event) {
   var guestList = event.getGuestList(true);
@@ -352,43 +412,6 @@ function getStatsSheet() {
   }
 
   return sheet;
-}
-
-// Populates the stored Spreadsheet with the meeting statistics stored in this class.
-//
-function updateStatsSheet(total, oneOnOnes, blockedTime, meetings, taggedMeetings) {
-  const sheet = getStatsSheet();
-
-  var stats = [
-    ["1:1s", oneOnOnes],
-    ["Total", total],
-    ["Blocked Time", blockedTime],
-    ["Meetings", meetings]
-  ];
-
-  for (const [tag, count] of Object.entries(taggedMeetings)) {
-    stats.push([tag, count]);
-  }
-
-  // Set and freeze the column headers
-  var r = sheet.getRange(MEETING_STATS_HDR_RANGE);
-  r.setValues(MEETING_STATS_HDRS);
-  r.setFontWeight('bold');
-  sheet.setFrozenRows(1);
-
-  // Generate the range
-  const range = [MEETING_STATS_DATA_RANGE_COLS, stats.length + 1].join("");
-
-  // Populate the data
-  r = sheet.getRange(range);
-
-  r.setValues(stats);
-
-  // Sort the data
-  r.sort({column: MEETING_STATS_SORT_COLUMN, ascending: true});
-
-  // Resize columns last, to match the data we just added.
-  sheet.autoResizeColumns(1, MEETING_STATS_HDRS[0].length);
 }
 
 // Given a CalendarEvent, will read the description and return any of the text
