@@ -23,7 +23,7 @@ const RANGE_DAYS_FUTURE = 30;
 
 // Name of the sheet to show the 1:1 ranking results.
 // Will create if it doesn't exist, otherwise will re-use the existing.
-const ONE_ON_ONE_LIST_SHEET = "1:1 Stats";
+const ONE_ON_ONE_LIST_SHEET = "1:1 List";
 const ONE_ON_ONE_LIST_HDR_RANGE = "A1:F1";
 const ONE_ON_ONE_LIST_DATA_RANGE_COLS = "A2:F";
 const ONE_ON_ONE_LIST_DATA_RANGE_MAX = "A2:F200";
