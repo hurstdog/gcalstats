@@ -60,12 +60,12 @@ const MEETING_STATS_SORT_COLUMN = 2;
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-// OneOnOneStatCollector
+// OneOnOneListCollector
 //
 // This class contains all of the knowledge for parsing the one on one stats
 // spreadsheet, collating the stats from a series of CalendarEvents, and then
 // updating the stats spreadsheet.
-class OneOnOneStatCollector {
+class OneOnOneListCollector {
 
   // Given a Spreadsheet, constructs & populates the stats collector based on the
   // data in that spreadsheet.
@@ -165,7 +165,7 @@ class OneOnOneStatCollector {
 
   // Populates the stored Spreadsheet with the statistics stored in this class.
   //
-  updateStatsSheet() {
+  updateListSheet() {
     var freqEntries = Object.entries(this.oneOnOneFreq);
 
     // Set and freeze the column headers
@@ -248,7 +248,7 @@ class OneOnOneStatCollector {
 
 }
 
-// End OneOnOneStatCollector
+// End OneOnOneListCollector
 /////////////////////////////////////////////////////////////////////////////////
 
 // Adds a custom menu item to run the script
@@ -278,7 +278,7 @@ function reportStats(events) {
 
   // 'tag name' => count
   var tags = {};
-  var stats = new OneOnOneStatCollector(getListSheet());
+  var oneOnOneList = new OneOnOneListCollector(getListSheet());
   for (const event of events) {
     var tag = extractTag(event);
     var guests = event.getGuestList(true);
@@ -290,7 +290,7 @@ function reportStats(events) {
       blockedTime++;
     } else if (guests.length == 2) {
       oneOnOnes++;
-      stats.trackOneOnOne(event);
+      oneOnOneList.trackOneOnOne(event);
       //Logger.log('Found a 1:1 with guests! ' + event.getTitle());
       //printGuests(guests);
     } else {
@@ -300,7 +300,7 @@ function reportStats(events) {
     }
   }
 
-  stats.updateStatsSheet();
+  oneOnOneList.updateListSheet();
   updateStatsSheet(numEvents, oneOnOnes, blockedTime, meetings, tags);
 }
 
