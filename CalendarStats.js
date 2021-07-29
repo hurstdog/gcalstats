@@ -21,24 +21,24 @@ const MEETING_TAG = 'TAG: ';
 const RANGE_DAYS_PAST = 30;
 const RANGE_DAYS_FUTURE = 30;
 
-// Name of the sheet to show the results.
+// Name of the sheet to show the 1:1 ranking results.
 // Will create if it doesn't exist, otherwise will re-use the existing.
-const ONE_ON_ONE_STATS_SHEET = "1:1 Stats";
-const ONE_ON_ONE_HDR_RANGE = "A1:F1";
-const ONE_ON_ONE_STATS_DATA_RANGE_COLS = "A2:F";
-const ONE_ON_ONE_STATS_DATA_RANGE_MAX = "A2:F200";
+const ONE_ON_ONE_LIST_SHEET = "1:1 Stats";
+const ONE_ON_ONE_LIST_HDR_RANGE = "A1:F1";
+const ONE_ON_ONE_LIST_DATA_RANGE_COLS = "A2:F";
+const ONE_ON_ONE_LIST_DATA_RANGE_MAX = "A2:F200";
 
 // Headers for the stats rows. Note that this is the order needed in the stats
 // frequency dict as well.
-const ONE_ON_ONE_STATS_HDRS = [["Who",
+const ONE_ON_ONE_LIST_HDRS = [["Who",
                                 "Time Since Last 1:1",
                                 "Time Until next 1:1",
                                 "SLO",
                                 "Days Overdue",
                                 "Notes"]];
 
-// Which column to sort the results by. This corresponds to ONE_ON_ONE_STATS_HDRS.
-const ONE_ON_ONE_SORT_COLUMN = 5;
+// Which column to sort the results by. This corresponds to ONE_ON_ONE_LIST_HDRS.
+const ONE_ON_ONE_LIST_SORT_COLUMN = 5;
 
 // End Constants. Below is just code, and bad code at that. Ignore it.
 /////////////////////////////////////////////////////////////////////////////////
@@ -72,11 +72,11 @@ class OneOnOneStatCollector {
   }
 
   // Populates the oneOnOneFreq dictionary with data from the Stats Sheet.
-  // NOTE: This assumes that the sheet has the columns in ONE_ON_ONE_STATS_HDRS,
+  // NOTE: This assumes that the sheet has the columns in ONE_ON_ONE_LIST_HDRS,
   //  in that order.
   //
   _populateOneOnOneFreq() {
-    var r = this.sheet.getRange(ONE_ON_ONE_STATS_DATA_RANGE_MAX);
+    var r = this.sheet.getRange(ONE_ON_ONE_LIST_DATA_RANGE_MAX);
 
     var freq = {}
 
@@ -154,13 +154,13 @@ class OneOnOneStatCollector {
     var freqEntries = Object.entries(this.oneOnOneFreq);
 
     // Set and freeze the column headers
-    var r = this.sheet.getRange(ONE_ON_ONE_HDR_RANGE);
-    r.setValues(ONE_ON_ONE_STATS_HDRS);
+    var r = this.sheet.getRange(ONE_ON_ONE_LIST_HDR_RANGE);
+    r.setValues(ONE_ON_ONE_LIST_HDRS);
     r.setFontWeight('bold');
     this.sheet.setFrozenRows(1);
 
     // Generate the range
-    var range = [ONE_ON_ONE_STATS_DATA_RANGE_COLS, freqEntries.length + 1].join("");
+    var range = [ONE_ON_ONE_LIST_DATA_RANGE_COLS, freqEntries.length + 1].join("");
 
     // Populate the data
     r = this.sheet.getRange(range);
@@ -168,10 +168,10 @@ class OneOnOneStatCollector {
     r.setValues(this.getFlatFreq());
 
     // Sort the data
-    r.sort({column: ONE_ON_ONE_SORT_COLUMN, ascending: false});
+    r.sort({column: ONE_ON_ONE_LIST_SORT_COLUMN, ascending: false});
 
     // Resize columns last, to match the data we just added.
-    this.sheet.autoResizeColumns(1, ONE_ON_ONE_STATS_HDRS[0].length);
+    this.sheet.autoResizeColumns(1, ONE_ON_ONE_LIST_HDRS[0].length);
   }
 
   // Returns the email frequency data structure as an array of arrays, ready to
@@ -324,10 +324,10 @@ function cleanGuestEmail(email) {
 // Returns the Spreadsheet object used to store statistics, and creates it if one
 // doesn't exist yet.
 function getStatsSheet() {
-  var sheet =  SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONE_ON_ONE_STATS_SHEET);
+  var sheet =  SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONE_ON_ONE_LIST_SHEET);
   if (sheet == null) {
     SpreadsheetApp.getActiveSpreadsheet().insertSheet();
-    SpreadsheetApp.getActiveSpreadsheet().renameActiveSheet(ONE_ON_ONE_STATS_SHEET);
+    SpreadsheetApp.getActiveSpreadsheet().renameActiveSheet(ONE_ON_ONE_LIST_SHEET);
     sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   }
 
@@ -380,4 +380,3 @@ function getDateByDays(days) {
   var now = new Date();
   return new Date(now.getTime() + (days * 24 * 60 * 60 * 1000));
 }
-
