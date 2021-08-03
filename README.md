@@ -3,6 +3,9 @@
 This is a simple Apps Script for Spreadsheets and Calendar to pull data from
 your Google Calendar and report various statistics on it in the spreadsheet.
 
+This was inspired by a Google Eng Manager who wrote a similar script and shared
+it on the `eng-managers@` mailing list in the mid-2010s. Thanks :)
+
 ## Setup
 
   1 [Create a new spreadsheet](https://sheets.new/)
