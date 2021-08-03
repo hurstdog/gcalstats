@@ -8,15 +8,15 @@ it on the `eng-managers@` mailing list in the mid-2010s. Thanks :)
 
 ## Setup
 
-	1. [Create a new spreadsheet](https://sheets.new/)
-	1. Click `Tools -> Script Editor`
-	1. Change the title to whatever you like (I used 'Calendar Stats')
-	1. Delete the example function `myFunction` and paste in the contents of `CalendarStats.js`
-	1. Edit `OWNER_USERNAME` and `OWNER_DOMAIN` to match the Google account you
+  1. [Create a new spreadsheet](https://sheets.new/)
+  1. Click `Tools -> Script Editor`
+  1. Change the title to whatever you like (I used 'Calendar Stats')
+  1. Delete the example function `myFunction` and paste in the contents of `CalendarStats.js`
+  1. Edit `OWNER_USERNAME` and `OWNER_DOMAIN` to match the Google account you
      want calendar stats for.
-	1. In the function pull-down menu, choose `ListMeetings`, then click `Run`
-	1. Authorize the access (if you trust the code, naturally).
-	1. Choose your spreadsheet tab again and view the results. They'll be in
+  1. In the function pull-down menu, choose `ListMeetings`, then click `Run`
+  1. Authorize the access (if you trust the code, naturally).
+  1. Choose your spreadsheet tab again and view the results. They'll be in
      sheets named `1:1 List` and `Meeting Stats` (names chosen in the constants
      section of the script)
 
