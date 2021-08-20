@@ -21,8 +21,12 @@ const MEETING_TAG = 'TAG: ';
 const RANGE_DAYS_PAST = 60;
 const RANGE_DAYS_FUTURE = 30;
 
-// Work hours per day.  For now, 9-6pm, or 9 hours a day (45 hour week).
-const WORK_HOURS_PER_DAY = 9;
+// How many hours a day do you work?  For now, 9-6pm, or 9 hours a day (45 hour week).
+// This is used to exclude events outside work hours from tracking.
+// Note that if you regularly have meetings outside of working hours, I can't help you :P
+const START_HOUR = 9;
+const END_HOUR = 18;
+const WORK_HOURS_PER_DAY = END_HOUR - START_HOUR;
 const WORK_DAYS_PER_WEEK = 5;
 
 // String for tracking unscheduled time. If a week has no meetings, you'll have
@@ -58,7 +62,8 @@ const ONE_ON_ONE_LIST_SORT_COLUMN = 5;
 const MEETING_STATS_SHEET = "Meeting Stats";
 const MEETING_STATS_HDR_RANGE = "A1:E1";
 const MEETING_STATS_DATA_RANGE_COLS = "A2:E";
-const MEETING_STATS_DATA_RANGE_MAX = "A2:E200";
+
+const MEETING_STATS_DATA_HOUR_RANGE_COLS = "B2:E";
 
 // Headers for the stats rows. Note that this is the order needed in the stats
 // frequency dict as well.
@@ -67,7 +72,7 @@ const MEETING_STATS_HDRS = [["Week",
                              "1:1s",
                              "Meetings",
                              "Blocked",
-                             "Unscheduled"]];
+                             UNSCHEDULED_TIME]];
 
 // Which column to sort the results by. This corresponds to MEETING_STATS_HDRS.
 const MEETING_STATS_SORT_COLUMN = 1;
@@ -348,16 +353,15 @@ class MeetingStatsCollector {
     this._ensureWeekIsInitialized(eventWeek);
 
     if (tag != null) {
-      this._inc(this.meetings[eventWeek], tag)
-      //this._inc(this.meetings, tag);
+      this._recordHours(event, eventWeek, tag);
     } else if (guests.length == 0) {
-      this._inc(this.meetings[eventWeek], "Blocked Time");
+      this._recordHours(event, eventWeek, "Blocked Time");
     } else if (guests.length == 1 && guests[0].getEmail() == OWNER_EMAIL) {
-      this._inc(this.meetings[eventWeek], "Blocked Time");
+      this._recordHours(event, eventWeek, "Blocked Time");
     } else if (guests.length == 2) {
-      this._inc(this.meetings[eventWeek], "1:1s");
+      this._recordHours(event, eventWeek, "1:1s");
     } else {
-      this._inc(this.meetings[eventWeek], "Meetings");
+      this._recordHours(event, eventWeek, "Meetings");
     }
   }
 
@@ -368,7 +372,17 @@ class MeetingStatsCollector {
   //   eventWeek: a String representing the Sunday of the week of the event, in YYYY-MM-DD format.
   //   tag: the tag to associate with this event.
   _recordHours(event, eventWeek, tag) {
-    return;
+    if (event.getStartTime().getHours() < START_HOUR) {
+      //Logger.log('Skipping event that starts before hour ' + START_HOUR + '. It starts at ' + event.getStartTime().getHours());
+      return;
+    } else if (event.getEndTime().getHours() > END_HOUR) {
+      //Logger.log('Skipping event that ends after hour ' + END_HOUR + '. It ends at ' + event.getEndTime().getHours());
+      return;
+    }
+
+    const hours = (event.getEndTime() - event.getStartTime()) / 1000 / 60 / 60;
+    this._inc(this.meetings[eventWeek], tag, hours);
+    this._inc(this.meetings[eventWeek], UNSCHEDULED_TIME, -1 * hours);
   }
 
   // Given an event, returns the date of the Sunday of the week in the format "YYYY-MM-DD"
@@ -405,7 +419,7 @@ class MeetingStatsCollector {
                   this.meetings[tag]["Blocked Time"],
                   this.meetings[tag][UNSCHEDULED_TIME]]);
     }
-    
+
     // Set and freeze the column headers
     var r = this.sheet.getRange(MEETING_STATS_HDR_RANGE);
     r.setValues(MEETING_STATS_HDRS);
@@ -422,6 +436,9 @@ class MeetingStatsCollector {
 
     // Resize columns last, to match the data we just added.
     this.sheet.autoResizeColumns(1, MEETING_STATS_HDRS[0].length);
+
+    // Format the data cells
+    this.sheet.getRange([MEETING_STATS_DATA_HOUR_RANGE_COLS, stats.length + 1].join("")).setNumberFormat("0.0");
   }
 
   // Given a CalendarEvent, will read the description and return any of the text
@@ -441,12 +458,12 @@ class MeetingStatsCollector {
     return tag;
   }
 
-  // Increments element `tag` in dictionary `dict`
-  _inc(dict, tag) {
+  // Increments element `tag` in dictionary `dict` by value `value`
+  _inc(dict, tag, value) {
     if (tag in dict) {
-      dict[tag]++;
+      dict[tag] = dict[tag] + value;
     } else {
-      dict[tag] = 1;
+      dict[tag] = value;
     }
   }
 }
