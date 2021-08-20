@@ -18,8 +18,21 @@ const MEETING_TAG = 'TAG: ';
 
 // Counting days from today, forward or backwards.
 // Note that both of these values should be positive
-const RANGE_DAYS_PAST = 30;
+const RANGE_DAYS_PAST = 60;
 const RANGE_DAYS_FUTURE = 30;
+
+// Work hours per day.  For now, 9-6pm, or 9 hours a day (45 hour week).
+const WORK_HOURS_PER_DAY = 9;
+const WORK_DAYS_PER_WEEK = 5;
+
+// String for tracking unscheduled time. If a week has no meetings, you'll have
+// WORK_HOURS_PER_DAY * WORK_DAYS_PER_WEEK hours of UNSCHEDULED_TIME.
+const UNSCHEDULED_TIME = "Unscheduled";
+
+/////////////////////////////////////////////////////////////////////////////////
+// End user configurable Constants.
+// Below here are constants for the running of the script, and you probalby
+// shouldn't change them without fussing with the script code as well.
 
 // Name of the sheet to show the 1:1 ranking results.
 // Will create if it doesn't exist, otherwise will re-use the existing.
@@ -43,17 +56,21 @@ const ONE_ON_ONE_LIST_SORT_COLUMN = 5;
 // Name of the sheet to show the 1:1 stats results.
 // Will create if it doesn't exist, otherwise will re-use the existing.
 const MEETING_STATS_SHEET = "Meeting Stats";
-const MEETING_STATS_HDR_RANGE = "A1:B1";
-const MEETING_STATS_DATA_RANGE_COLS = "A2:B";
-const MEETING_STATS_DATA_RANGE_MAX = "A2:B200";
+const MEETING_STATS_HDR_RANGE = "A1:E1";
+const MEETING_STATS_DATA_RANGE_COLS = "A2:E";
+const MEETING_STATS_DATA_RANGE_MAX = "A2:E200";
 
 // Headers for the stats rows. Note that this is the order needed in the stats
 // frequency dict as well.
-const MEETING_STATS_HDRS = [["Meeting Type",
-                             "Num Events"]];
+// TODO: Support tags.
+const MEETING_STATS_HDRS = [["Week",
+                             "1:1s",
+                             "Meetings",
+                             "Blocked",
+                             "Unscheduled"]];
 
 // Which column to sort the results by. This corresponds to MEETING_STATS_HDRS.
-const MEETING_STATS_SORT_COLUMN = 2;
+const MEETING_STATS_SORT_COLUMN = 1;
 
 // End Constants. Below is just code, and bad code at that. Ignore it.
 /////////////////////////////////////////////////////////////////////////////////
@@ -303,8 +320,19 @@ class MeetingStatsCollector {
   constructor(sheet) {
     this.sheet = sheet;
 
+  /*
+   const MEETING_STATS_HDRS = [["Week",
+                                "1:1s",
+                                "Meetings",
+                                "Blocked",
+                                "Unscheduled"]];
+                             */
     // Map of 'Meeting type' => count
     this.meetings = {};
+
+    // Map of 'Meeting week' => {'Meeting type' => hours}
+    // Note the special "Unscheduled" meeting type, which starts out with the time available
+    // in the whole week.
   }
 
   // Given a CalendarEvent, will extract basic information about what type of event it
@@ -316,16 +344,52 @@ class MeetingStatsCollector {
     var tag = this._extractTag(event);
     var guests = event.getGuestList(true);
 
+    var eventWeek = this._extractWeek(event);
+    this._ensureWeekIsInitialized(eventWeek);
+
     if (tag != null) {
-      this._inc(this.meetings, tag);
+      this._inc(this.meetings[eventWeek], tag)
+      //this._inc(this.meetings, tag);
     } else if (guests.length == 0) {
-      this._inc(this.meetings, "Blocked Time");
+      this._inc(this.meetings[eventWeek], "Blocked Time");
     } else if (guests.length == 1 && guests[0].getEmail() == OWNER_EMAIL) {
-      this._inc(this.meetings, "Blocked Time");
+      this._inc(this.meetings[eventWeek], "Blocked Time");
     } else if (guests.length == 2) {
-      this._inc(this.meetings, "1:1s");
+      this._inc(this.meetings[eventWeek], "1:1s");
     } else {
-      this._inc(this.meetings, "Meetings");;
+      this._inc(this.meetings[eventWeek], "Meetings");
+    }
+  }
+
+  // Records the hours for a given meeting, of a given type, while subtracting from Unscheduled time.
+  //
+  // Arguments:
+  //   event: A CalendarEvent
+  //   eventWeek: a String representing the Sunday of the week of the event, in YYYY-MM-DD format.
+  //   tag: the tag to associate with this event.
+  _recordHours(event, eventWeek, tag) {
+    return;
+  }
+
+  // Given an event, returns the date of the Sunday of the week in the format "YYYY-MM-DD"
+  _extractWeek(event) {
+    // Subtract as many days as needed from the event date to get to Sunday to create a new date object
+    // from that, and then convert that to a string.
+    const week = new Date(event.getStartTime() - event.getStartTime().getDay() * 24 * 60 * 60 * 1000);
+    const weekstr = week.getFullYear() + "-" + (week.getMonth() + 1) + "-" + week.getDate()
+    return weekstr;
+  }
+
+  // Ensures that we have a structure populated for tracking the stats for the given week.
+  // Note that this also creates a basic starting count for "Unscheduled" time, calculated as
+  // the amount of time between your start and end hour each day.
+  //
+  // Arguments:
+  //   weekStr: A string representing the week in "YYYY-MM-DD" format.
+  _ensureWeekIsInitialized(weekStr) {
+    if (!(weekStr in this.meetings)) {
+      this.meetings[weekStr] = {};
+      this.meetings[weekStr][UNSCHEDULED_TIME] = WORK_HOURS_PER_DAY * WORK_DAYS_PER_WEEK;
     }
   }
 
@@ -335,8 +399,13 @@ class MeetingStatsCollector {
   updateStatsSheet() {
     var stats = [];
     for (const [tag, count] of Object.entries(this.meetings)) {
-      stats.push([tag, count]);
+      stats.push([tag,
+                  this.meetings[tag]["1:1s"],
+                  this.meetings[tag]["Meetings"],
+                  this.meetings[tag]["Blocked Time"],
+                  this.meetings[tag][UNSCHEDULED_TIME]]);
     }
+    
     // Set and freeze the column headers
     var r = this.sheet.getRange(MEETING_STATS_HDR_RANGE);
     r.setValues(MEETING_STATS_HDRS);
