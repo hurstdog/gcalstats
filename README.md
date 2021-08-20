@@ -14,7 +14,7 @@ it on the `eng-managers@` mailing list in the mid-2010s. Thanks :)
   1. Delete the example function `myFunction` and paste in the contents of `CalendarStats.js`
   1. Edit `OWNER_USERNAME` and `OWNER_DOMAIN` to match the Google account you
      want calendar stats for.
-  1. In the function pull-down menu, choose `ListMeetings`, then click `Run`
+  1. In the function pull-down menu, choose `CollectMeetingStats`, then click `Run`
   1. Authorize the access (if you trust the code, naturally).
   1. Choose your spreadsheet tab again and view the results. They'll be in
      sheets named `1:1 List` and `Meeting Stats` (names chosen in the constants
@@ -39,7 +39,10 @@ to check in with them.
 
 ## Meeting Stats
 
-This is just a rough breakdown of the time spent in various types of meetings.
-It can pick out 1:1s, general meetings (more than 2 participants), and supports
-custom tags. Put the tag 'TAG: blah' in a meeting to get that meeting counted
-as 'blah' instead of 'Meetings'.
+This is just a rough breakdown of the time spent in various types of meetings,
+summarized weekly.  It can pick out 1:1s, general meetings (more than 2
+participants), and supports custom tags. Put the tag 'TAG: blah' in a meeting
+to get that meeting counted as 'blah' instead of 'Meetings'.
+
+NOTE: custom tags is currently broken though it collects them. I just haven't
+gotten around to adding the columns for the custom tags yet.
