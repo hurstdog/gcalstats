@@ -115,15 +115,6 @@ class OneOnOneListCollector {
     this.oneOnOneFreq = freq;
   }
 
-  // Given a CalendarEvent, this will return true if it's a 1:1, false otherwise.
-  //
-  // Argument:
-  //   event: CalendarEvent
-  isOneOnOne(event) {
-    var guests = event.getGuestList(true);
-    return guests.length == 2;
-  }
-
   // Given a CalendarEvent that is might be a 1:1, extracts out the 1:1 partner name and
   // updates the statistics for 1:1s with that person (if it's a 1:1, naturally).
   //
@@ -132,12 +123,12 @@ class OneOnOneListCollector {
   // Arguments:
   //   event: CalendarEvent
   maybeTrackOneOnOne(event) {
-    if (!this.isOneOnOne(event)) {
+    if (!this._isOneOnOne(event)) {
       return;
     }
 
     const now = new Date();
-    const guest = cleanGuestEmail(getOneOnOneGuestEmail(event));
+    const guest = this._cleanGuestEmail(this._getOneOnOneGuestEmail(event));
 
     // Temp variables so I don't have to spend all my mental energy with array indices
     var guestStats = this.oneOnOneFreq[guest];
@@ -193,7 +184,7 @@ class OneOnOneListCollector {
     // Populate the data
     r = this.sheet.getRange(range);
 
-    r.setValues(this.getFlatFreq());
+    r.setValues(this._getFlatFreq());
 
     // Sort the data
     r.sort({column: ONE_ON_ONE_LIST_SORT_COLUMN, ascending: false});
@@ -202,10 +193,19 @@ class OneOnOneListCollector {
     this.sheet.autoResizeColumns(1, ONE_ON_ONE_LIST_HDRS[0].length);
   }
 
+  // Given a CalendarEvent, this will return true if it's a 1:1, false otherwise.
+  //
+  // Argument:
+  //   event: CalendarEvent
+  _isOneOnOne(event) {
+    var guests = event.getGuestList(true);
+    return guests.length == 2;
+  }
+
   // Returns the email frequency data structure as an array of arrays, ready to
   // pass to Range.setValues()
   //
-  getFlatFreq() {
+  _getFlatFreq() {
     var f = [];
     for (const [k, v] of Object.entries(this.oneOnOneFreq)) {
 
@@ -241,6 +241,30 @@ class OneOnOneListCollector {
       f.push([guest, last, next, slo, overdue, notes]);
     }
     return f;
+  }
+
+  // Given an event with two guests, returns the guest email that isn't OWNER_EMAIL
+  // Prints an error and returns null on lists that don't contain two entries.
+  _getOneOnOneGuestEmail(event) {
+    var guestList = event.getGuestList(true);
+    if (guestList.length != 2) {
+      Logger.log('Too many guests in purported 1:1 (Title: ' + event.getTitle() + ', skipping');
+      return null;
+    }
+
+    var guest = "";
+    for (const g of guestList) {
+      if (g.getEmail() != OWNER_EMAIL) {
+        guest = g.getEmail();
+      }
+    }
+
+    return guest;
+  }
+
+  // Given an email address, strips off the domain if it's the same as OWNER_DOMAIN
+  _cleanGuestEmail(email) {
+    return email.replace('@' + OWNER_DOMAIN, '');
   }
 
   _printFlatFreq(freq) {
@@ -289,19 +313,19 @@ class MeetingStatsCollector {
   // Arguments:
   //   event: A Calendar Event
   trackEvent(event) {
-    var tag = extractTag(event);
+    var tag = this._extractTag(event);
     var guests = event.getGuestList(true);
 
     if (tag != null) {
-      inc(this.meetings, tag);
+      this._inc(this.meetings, tag);
     } else if (guests.length == 0) {
-      inc(this.meetings, "Blocked Time");
+      this._inc(this.meetings, "Blocked Time");
     } else if (guests.length == 1 && guests[0].getEmail() == OWNER_EMAIL) {
-      inc(this.meetings, "Blocked Time");
+      this._inc(this.meetings, "Blocked Time");
     } else if (guests.length == 2) {
-      inc(this.meetings, "1:1s");
+      this._inc(this.meetings, "1:1s");
     } else {
-      inc(this.meetings, "Meetings");;
+      this._inc(this.meetings, "Meetings");;
     }
   }
 
@@ -330,6 +354,32 @@ class MeetingStatsCollector {
     // Resize columns last, to match the data we just added.
     this.sheet.autoResizeColumns(1, MEETING_STATS_HDRS[0].length);
   }
+
+  // Given a CalendarEvent, will read the description and return any of the text
+  // on a line after the keyword MEETING_TAG (currently 'TAG: ')
+  // e.g. return $1 from "^\w*TAG: (.*)\w*$"
+  _extractTag(event) {
+    var tag = null;
+    var desc = event.getDescription();
+    var lines = desc.split("\n");
+    for (const line of lines) {
+      var trimline = line.trim();
+      if (trimline.startsWith(MEETING_TAG)) {
+        tag = trimline.substr(MEETING_TAG.length);
+        break;
+      }
+    }
+    return tag;
+  }
+
+  // Increments element `tag` in dictionary `dict`
+  _inc(dict, tag) {
+    if (tag in dict) {
+      dict[tag]++;
+    } else {
+      dict[tag] = 1;
+    }
+  }
 }
 
 // End MeetingStatsCollector
@@ -339,21 +389,15 @@ class MeetingStatsCollector {
 function onOpen() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ss.addMenu('Calendar Script',
-             [{name: 'Update Meeting Stats', functionName: 'ListMeetings'}]);
+             [{name: 'Collect Meeting Stats', functionName: 'CollectMeetingStats'}]);
 }
 
-function ListMeetings() {
+// Collects statistics on 1:1s and general meetings on the user's default calendar.
+//
+function CollectMeetingStats() {
   var events = CalendarApp.getDefaultCalendar().getEvents(getDateByDays(RANGE_DAYS_PAST * -1),
                                                           getDateByDays(RANGE_DAYS_FUTURE));
   
-  reportStats(events)
-}
-
-// Collects statistics on 1:1s and general meetings on the CalendarEvent[] passed in.
-//
-// Arguments:
-//   events: A list of CalendarEvent
-function reportStats(events) {
   var oneOnOneList = new OneOnOneListCollector(getListSheet());
   var stats = new MeetingStatsCollector(getStatsSheet());
   for (const event of events) {
@@ -362,32 +406,7 @@ function reportStats(events) {
   }
 
   oneOnOneList.updateListSheet();
-  //stats.updateStatsSheet(numEvents, oneOnOnes, blockedTime, meetings, tags);
   stats.updateStatsSheet();
-}
-
-// Given an event with two guests, returns the guest email that isn't OWNER_EMAIL
-// Prints an error and returns null on lists that don't contain two entries.
-function getOneOnOneGuestEmail(event) {
-  var guestList = event.getGuestList(true);
-  if (guestList.length != 2) {
-    Logger.log('Too many guests in purported 1:1 (Title: ' + event.getTitle() + ', skipping');
-    return null;
-  }
-
-  var guest = "";
-  for (const g of guestList) {
-    if (g.getEmail() != OWNER_EMAIL) {
-      guest = g.getEmail();
-    }
-  }
-
-  return guest;
-}
-
-// Given an email address, strips off the domain if it's the same as OWNER_DOMAIN
-function cleanGuestEmail(email) {
-  return email.replace('@' + OWNER_DOMAIN, '');
 }
 
 // Returns the Spreadsheet object used to store 1:1 lists, and creates it if one
@@ -414,33 +433,6 @@ function getStatsSheet() {
   }
 
   return sheet;
-}
-
-// Given a CalendarEvent, will read the description and return any of the text
-// on a line after the keyword MEETING_TAG (currently 'TAG: ')
-// e.g. return $1 from "^\w*TAG: (.*)\w*$"
-function extractTag(event) {
-  var tag = null;
-  var desc = event.getDescription();
-  var lines = desc.split("\n");
-  for (const line of lines) {
-    var trimline = line.trim();
-    if (trimline.startsWith(MEETING_TAG)) {
-      tag = trimline.substr(MEETING_TAG.length);
-      break;
-    }
-  }
-  return tag;
-}
-
-
-// Increments element `tag` in dictionary `dict`
-function inc(dict, tag) {
-  if (tag in dict) {
-    dict[tag]++;
-  } else {
-    dict[tag] = 1;
-  }
 }
 
 function printGuests(guests) {
