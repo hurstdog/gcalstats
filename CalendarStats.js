@@ -124,21 +124,25 @@ class OneOnOneListCollector {
     return guests.length == 2;
   }
 
-  // Given a CalendarEvent that is assumed to be a 1:1, this extracts out the 1:1 partner name and
-  // updates the statistics for 1:1s with that person.
+  // Given a CalendarEvent that is might be a 1:1, extracts out the 1:1 partner name and
+  // updates the statistics for 1:1s with that person (if it's a 1:1, naturally).
   //
   // TODO: Collect stats on 1:1 frequency as well.
   //
   // Arguments:
   //   event: CalendarEvent
-  trackOneOnOne(event) {
+  maybeTrackOneOnOne(event) {
+    if (!this.isOneOnOne(event)) {
+      return;
+    }
+
     const now = new Date();
     const guest = cleanGuestEmail(getOneOnOneGuestEmail(event));
 
     // Temp variables so I don't have to spend all my mental energy with array indices
-    var guestStats = this.oneOnOneFreq[guest]
+    var guestStats = this.oneOnOneFreq[guest];
     if (guestStats == undefined) {
-      guestStats = []
+      guestStats = [];
     }
 
     var lastOneOnOneDelta = guestStats[0]; // days in the past
@@ -353,9 +357,7 @@ function reportStats(events) {
   var oneOnOneList = new OneOnOneListCollector(getListSheet());
   var stats = new MeetingStatsCollector(getStatsSheet());
   for (const event of events) {
-    if (oneOnOneList.isOneOnOne(event)) {
-      oneOnOneList.trackOneOnOne(event);
-    }
+    oneOnOneList.maybeTrackOneOnOne(event);
     stats.trackEvent(event);
   }
 
