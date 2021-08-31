@@ -18,8 +18,8 @@ const MEETING_TAG = 'TAG: ';
 
 // Counting days from today, forward or backwards.
 // Note that both of these values should be positive
-const RANGE_DAYS_PAST = 60;
-const RANGE_DAYS_FUTURE = 30;
+const RANGE_DAYS_PAST = 7;
+const RANGE_DAYS_FUTURE = 7;
 
 // How many hours a day do you work?  For now, 9-6pm, or 9 hours a day (45 hour week).
 // This is used to exclude events outside work hours from tracking.
@@ -48,8 +48,8 @@ const ONE_ON_ONE_LIST_DATA_RANGE_MAX = "A2:F200";
 // Headers for the stats rows. Note that this is the order needed in the stats
 // frequency dict as well.
 const ONE_ON_ONE_LIST_HDRS = [["Who",
-                                "Time Since Last 1:1",
-                                "Time Until next 1:1",
+                                "Last 1:1",
+                                "Next 1:1",
                                 "SLO",
                                 "Days Overdue",
                                 "Notes"]];
@@ -158,8 +158,8 @@ class OneOnOneListCollector {
       guestStats = [];
     }
 
-    var lastOneOnOneDelta = guestStats[0]; // days in the past
-    var nextOneOnOneDelta = guestStats[1]; // days in the future
+    var lastOneOnOne = guestStats[0]; // days in the past
+    var nextOneOnOne = guestStats[1]; // days in the future
 
     const diffMs = now - event.getStartTime();
     const daysToEvent = Math.floor(diffMs / 1000 / 60 / 60 / 24);
@@ -169,21 +169,21 @@ class OneOnOneListCollector {
       // Update the last 1:1 time if
       //    a) it hasn't been defined or
       //    b) it's farther away than the current event.
-      if (lastOneOnOneDelta == undefined || lastOneOnOneDelta > daysToEvent) {
-        lastOneOnOneDelta = daysToEvent;
+      if (lastOneOnOne == undefined || lastOneOnOne > event.getStartTime()) {
+        lastOneOnOne = event.getStartTime();
       }
     } else {
       // Future events
       // Update the last 1:1 time if
       //    a) it hasn't been defined or
       //    b) it's farther away (more negative) than the current event.
-      if (nextOneOnOneDelta == undefined || nextOneOnOneDelta < daysToEvent) {
-        nextOneOnOneDelta = daysToEvent;
+      if (nextOneOnOne == undefined || nextOneOnOne < event.getStartTime()) {
+        nextOneOnOne = event.getStartTime();
       }
     }
 
-    guestStats[0] = lastOneOnOneDelta;
-    guestStats[1] = nextOneOnOneDelta;
+    guestStats[0] = lastOneOnOne;
+    guestStats[1] = nextOneOnOne;
     this.oneOnOneFreq[guest] = guestStats;
 
     //Logger.log('Most recent 1:1 with ' + guest + ': ' + this.oneOnOneFreq[guest]);
@@ -251,7 +251,13 @@ class OneOnOneListCollector {
         if (!last) {
           overdue = slo;
         } else {
+          // Overdue is the gap between the last 1:1 and today.
           overdue = last - slo;
+          // last 1:1 date + SLO date < today. Show delta from now to today.
+          var expectedDate = new Date();
+          expectedDate.setDate(last.getDate() + slo);
+          const now = new Date();
+          overdue = Math.floor((now.getTime() - expectedDate.getTime()) / (1000 * 3600 * 24));
         }
 
         // If it's less than zero, we're totally fine, don't show anything.
