@@ -18,8 +18,8 @@ const MEETING_TAG = 'TAG: ';
 
 // Counting days from today, forward or backwards.
 // Note that both of these values should be positive
-const RANGE_DAYS_PAST = 7;
-const RANGE_DAYS_FUTURE = 7;
+const RANGE_DAYS_PAST = 90;
+const RANGE_DAYS_FUTURE = 90;
 
 // How many hours a day do you work?  For now, 9-6pm, or 9 hours a day (45 hour week).
 // This is used to exclude events outside work hours from tracking.
@@ -42,15 +42,18 @@ const UNSCHEDULED_TIME = "Unscheduled";
 // Will create if it doesn't exist, otherwise will re-use the existing.
 const ONE_ON_ONE_LIST_SHEET = "1:1 List";
 const ONE_ON_ONE_LIST_HDR_RANGE = "A1:F1";
-const ONE_ON_ONE_LIST_DATA_RANGE_COLS = "A2:F";
-const ONE_ON_ONE_LIST_DATA_RANGE_MAX = "A2:F200";
+const ONE_ON_ONE_LIST_DATA_RANGE_COLS = "A2:Z";
+const ONE_ON_ONE_LIST_DATA_RANGE_MAX = "A2:Z300";
+
+// The number of columns we'll preserve. Note this needs to match the columns above.
+const ONE_ON_ONE_LIST_DATA_RANGE_NUM_COLS = 26;
 
 // Headers for the stats rows. Note that this is the order needed in the stats
 // frequency dict as well.
 const ONE_ON_ONE_LIST_HDRS = [["Who",
                                 "Last 1:1",
                                 "Next 1:1",
-                                "SLO",
+                                "SLO (Days)",
                                 "Days Overdue",
                                 "Notes"]];
 
@@ -111,7 +114,6 @@ class OneOnOneListCollector {
   // Populates the oneOnOneFreq dictionary with data from the Stats Sheet.
   // NOTE: This assumes that the sheet has the columns in ONE_ON_ONE_LIST_HDRS,
   //  in that order.
-  //
   _populateOneOnOneFreq() {
     var r = this.sheet.getRange(ONE_ON_ONE_LIST_DATA_RANGE_MAX);
 
@@ -120,17 +122,13 @@ class OneOnOneListCollector {
     // Loop over the range, populating the frequency map as we go.
     for (const row of r.getValues()) {
       var email = row[0];
-      var lastO = row[1];
-      var nextO = row[2];
-      var slo = row[3];
-      var over = row[4];
-      var notes = row[5];
 
       if (email == "") {
         break;
       }
 
-      freq[email] = [lastO, nextO, slo, over, notes];
+      // Populate with everything except the email.
+      freq[email] = row.slice(1);
     }
 
     //this._printFreq(freq);
@@ -155,7 +153,7 @@ class OneOnOneListCollector {
     // Temp variables so I don't have to spend all my mental energy with array indices
     var guestStats = this.oneOnOneFreq[guest];
     if (guestStats == undefined) {
-      guestStats = [];
+      guestStats = this._createGuestStatsArray();
     }
 
     var lastOneOnOne = guestStats[0]; // days in the past
@@ -184,9 +182,21 @@ class OneOnOneListCollector {
 
     guestStats[0] = lastOneOnOne;
     guestStats[1] = nextOneOnOne;
+
     this.oneOnOneFreq[guest] = guestStats;
 
     //Logger.log('Most recent 1:1 with ' + guest + ': ' + this.oneOnOneFreq[guest]);
+  }
+
+  // Creates an empty array of 25 cols, to match the headers we read & rewrite
+  // Needs to be one less than the data range cols, since we don't store the email in this range.
+  _createGuestStatsArray() {
+    var result = [];
+    for (var i=0; i < ONE_ON_ONE_LIST_DATA_RANGE_NUM_COLS - 1; i++) {
+      result.push(undefined);
+    }
+
+    return result;
   }
 
   // Populates the stored Spreadsheet with the statistics stored in this class.
@@ -205,8 +215,16 @@ class OneOnOneListCollector {
 
     // Populate the data
     r = this.sheet.getRange(range);
+    Logger.log('Got range: ' + range);
+    Logger.log('Range cols are ' + r.getWidth() + ' and height is ' + r.getHeight());
 
-    r.setValues(this._getFlatFreq());
+    var flatfreq = this._getFlatFreq();
+    Logger.log('Flat freq has ' + flatfreq.length + ' rows');
+    Logger.log('First entry has ' + flatfreq[0].length + ' items');
+
+    //this._printFlatFreq(flatfreq);
+    //Logger.log('range is ' + r.getValues());
+    r.setValues(flatfreq);
 
     // Sort the data
     r.sort({column: ONE_ON_ONE_LIST_SORT_COLUMN, ascending: false});
@@ -236,7 +254,6 @@ class OneOnOneListCollector {
       var next = v[1];
       var slo = v[2];
       var overdue = undefined;
-      var notes = v[4];
 
       // Clean up next, so that it displays positive values rather than negative.
       if (next != undefined && next < 0) {
@@ -266,7 +283,8 @@ class OneOnOneListCollector {
         }
       }
 
-      f.push([guest, last, next, slo, overdue, notes]);
+      var res = [guest, last, next, slo, overdue].concat(v.slice(4));
+      f.push(res);
     }
     return f;
   }
@@ -439,9 +457,6 @@ class MeetingStatsCollector {
 
     // Sort the data
     r.sort({column: MEETING_STATS_SORT_COLUMN, ascending: true});
-
-    // Resize columns last, to match the data we just added.
-    this.sheet.autoResizeColumns(1, MEETING_STATS_HDRS[0].length);
 
     // Format the data cells
     this.sheet.getRange([MEETING_STATS_DATA_HOUR_RANGE_COLS, stats.length + 1].join("")).setNumberFormat("0.0");
