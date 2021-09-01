@@ -215,12 +215,8 @@ class OneOnOneListCollector {
 
     // Populate the data
     r = this.sheet.getRange(range);
-    Logger.log('Got range: ' + range);
-    Logger.log('Range cols are ' + r.getWidth() + ' and height is ' + r.getHeight());
 
     var flatfreq = this._getFlatFreq();
-    Logger.log('Flat freq has ' + flatfreq.length + ' rows');
-    Logger.log('First entry has ' + flatfreq[0].length + ' items');
 
     //this._printFlatFreq(flatfreq);
     //Logger.log('range is ' + r.getValues());
@@ -255,11 +251,6 @@ class OneOnOneListCollector {
       var slo = v[2];
       var overdue = undefined;
 
-      // Clean up next, so that it displays positive values rather than negative.
-      if (next != undefined && next < 0) {
-        next = Math.abs(next);
-      }
-
       // If we don't have useful variables to calculate how far out of SLO we are,
       // try to show something reasonable.
       if (!slo) {
@@ -268,16 +259,13 @@ class OneOnOneListCollector {
         if (!last) {
           overdue = slo;
         } else {
-          // Overdue is the gap between the last 1:1 and today.
-          overdue = last - slo;
-          // last 1:1 date + SLO date < today. Show delta from now to today.
-          var expectedDate = new Date();
-          expectedDate.setDate(last.getDate() + slo);
+          // overdue = the difference between today and when the 1:1 should have happened
+          var expectedDate = new Date(last.getTime() + (slo * 1000 * 3600 * 24));
           const now = new Date();
           overdue = Math.floor((now.getTime() - expectedDate.getTime()) / (1000 * 3600 * 24));
         }
 
-        // If it's less than zero, we're totally fine, don't show anything.
+        // If it's less than zero, we're not actually overdue so don't show anything.
         if (overdue <= 0) {
           overdue = "";
         }
