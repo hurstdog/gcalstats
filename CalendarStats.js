@@ -172,10 +172,10 @@ class OneOnOneListCollector {
       }
     } else {
       // Future events
-      // Update the last 1:1 time if
+      // Update the next 1:1 time if
       //    a) it hasn't been defined or
-      //    b) it's farther away (more negative) than the current event.
-      if (nextOneOnOne == undefined || nextOneOnOne < event.getStartTime()) {
+      //    b) it's farther away (greater than) than the current event.
+      if (nextOneOnOne == undefined || nextOneOnOne > event.getStartTime()) {
         nextOneOnOne = event.getStartTime();
       }
     }
