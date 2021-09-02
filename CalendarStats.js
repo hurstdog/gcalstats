@@ -129,6 +129,11 @@ class OneOnOneListCollector {
 
       // Populate with everything except the email.
       freq[email] = row.slice(1);
+
+      // Clean out the last/next 1:1 data, as it's going to be refreshed in the next steps.
+      // Also it's better to leave it empty then to have stale data.
+      freq[email][0] = "";
+      freq[email][1] = "";
     }
 
     //this._printFreq(freq);
@@ -160,14 +165,13 @@ class OneOnOneListCollector {
     var nextOneOnOne = guestStats[1]; // days in the future
 
     const diffMs = now - event.getStartTime();
-    const daysToEvent = Math.floor(diffMs / 1000 / 60 / 60 / 24);
 
     if (diffMs > 0) {
       // Past events
       // Update the last 1:1 time if
       //    a) it hasn't been defined or
       //    b) it's farther away than the current event.
-      if (lastOneOnOne == undefined || lastOneOnOne > event.getStartTime()) {
+      if (lastOneOnOne == undefined || lastOneOnOne == "" || lastOneOnOne > event.getStartTime()) {
         lastOneOnOne = event.getStartTime();
       }
     } else {
@@ -175,7 +179,7 @@ class OneOnOneListCollector {
       // Update the next 1:1 time if
       //    a) it hasn't been defined or
       //    b) it's farther away (greater than) than the current event.
-      if (nextOneOnOne == undefined || nextOneOnOne > event.getStartTime()) {
+      if (nextOneOnOne == undefined || nextOneOnOne == "" | nextOneOnOne > event.getStartTime()) {
         nextOneOnOne = event.getStartTime();
       }
     }
