@@ -51,14 +51,14 @@ const ONE_ON_ONE_LIST_DATA_RANGE_NUM_COLS = 26;
 // Headers for the stats rows. Note that this is the order needed in the stats
 // frequency dict as well.
 const ONE_ON_ONE_LIST_HDRS = [["Who",
-                                "Last 1:1",
-                                "Next 1:1",
-                                "SLO (Days)",
-                                "Days Overdue",
-                                "Notes"]];
+                               "Last 1:1",
+                               "Next 1:1",
+                               "SLO (Days)",
+                               "Days Overdue",
+                               "Notes"]];
 
 // Which column to sort the results by. This corresponds to ONE_ON_ONE_LIST_HDRS.
-const ONE_ON_ONE_LIST_SORT_COLUMN = 5;
+const ONE_ON_ONE_LIST_SORT_COLUMN_FIRST = 4;
 
 // Name of the sheet to show the 1:1 stats results.
 // Will create if it doesn't exist, otherwise will re-use the existing.
@@ -166,7 +166,7 @@ class OneOnOneListCollector {
 
     const eventStart = event.getStartTime();
     const diffMs = now - eventStart;
-
+    
     if (diffMs > 0) {
       // Past events
       // Update the last 1:1 time if
@@ -227,8 +227,8 @@ class OneOnOneListCollector {
     //Logger.log('range is ' + r.getValues());
     r.setValues(flatfreq);
 
-    // Sort the data
-    r.sort({column: ONE_ON_ONE_LIST_SORT_COLUMN, ascending: false});
+    // Sort the data, SLO ascending
+    r.sort([{column: ONE_ON_ONE_LIST_SORT_COLUMN_FIRST, ascending: true}]);
 
     // Resize columns last, to match the data we just added.
     this.sheet.autoResizeColumns(1, ONE_ON_ONE_LIST_HDRS[0].length);
@@ -248,36 +248,19 @@ class OneOnOneListCollector {
   //
   _getFlatFreq() {
     var f = [];
+    var i = 2; // Start at row 2.
     for (const [k, v] of Object.entries(this.oneOnOneFreq)) {
 
       var guest = k;
       var last = v[0];
       var next = v[1];
       var slo = v[2];
-      var overdue = undefined;
-
-      // If we don't have useful variables to calculate how far out of SLO we are,
-      // try to show something reasonable.
-      if (!slo) {
-        overdue = "";
-      } else {
-        if (!last) {
-          overdue = slo;
-        } else {
-          // overdue = the difference between today and when the 1:1 should have happened
-          var expectedDate = new Date(last.getTime() + (slo * 1000 * 3600 * 24));
-          const now = new Date();
-          overdue = Math.floor((now.getTime() - expectedDate.getTime()) / (1000 * 3600 * 24));
-        }
-
-        // If it's less than zero, we're not actually overdue so don't show anything.
-        if (overdue <= 0) {
-          overdue = "";
-        }
-      }
+      // yes this is terrible. I'm sorry.
+      var overdue = '=IF(ISBLANK(D' + i + '), , IF(ISBLANK(C' + i + '), "None scheduled!", IF(ISBLANK(B' + i + '), , IF(N("Show the difference between now and when it should be scheduled, only positive values") + NOW() - (B' + i + ' + D' + i + ') < 0, , FLOOR(NOW() - (B' + i + ' + D' + i + '))))))'
 
       var res = [guest, last, next, slo, overdue].concat(v.slice(4));
       f.push(res);
+      i = i + 1;
     }
     return f;
   }
@@ -485,13 +468,6 @@ class MeetingStatsCollector {
 // End MeetingStatsCollector
 /////////////////////////////////////////////////////////////////////////////////
 
-// Adds a custom menu item to run the script
-function onOpen() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  ss.addMenu('Calendar Script',
-             [{name: 'Collect Meeting Stats', functionName: 'CollectMeetingStats'}]);
-}
-
 // Collects statistics on 1:1s and general meetings on the user's default calendar.
 //
 function CollectMeetingStats() {
@@ -553,4 +529,11 @@ function getDateByDays(days) {
   // Determines how many events are happening in the next two hours.
   var now = new Date();
   return new Date(now.getTime() + (days * 24 * 60 * 60 * 1000));
+}
+
+// Adds a custom menu item to run the script
+function onOpen() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  ss.addMenu('Calendar Script',
+             [{name: 'Collect Meeting Stats', functionName: 'CollectMeetingStats'}]);
 }
