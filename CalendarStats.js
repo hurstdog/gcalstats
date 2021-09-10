@@ -164,14 +164,15 @@ class OneOnOneListCollector {
     var lastOneOnOne = guestStats[0]; // days in the past
     var nextOneOnOne = guestStats[1]; // days in the future
 
-    const diffMs = now - event.getStartTime();
+    const eventStart = event.getStartTime();
+    const diffMs = now - eventStart;
 
     if (diffMs > 0) {
       // Past events
       // Update the last 1:1 time if
       //    a) it hasn't been defined or
-      //    b) it's farther away than the current event.
-      if (lastOneOnOne == undefined || lastOneOnOne == "" || lastOneOnOne > event.getStartTime()) {
+      //    b) it's farther away than the current event (more in the past, or less than).
+      if (lastOneOnOne == undefined || lastOneOnOne == "" || lastOneOnOne < eventStart) {
         lastOneOnOne = event.getStartTime();
       }
     } else {
@@ -179,7 +180,7 @@ class OneOnOneListCollector {
       // Update the next 1:1 time if
       //    a) it hasn't been defined or
       //    b) it's farther away (greater than) than the current event.
-      if (nextOneOnOne == undefined || nextOneOnOne == "" | nextOneOnOne > event.getStartTime()) {
+      if (nextOneOnOne == undefined || nextOneOnOne == "" | nextOneOnOne > eventStart) {
         nextOneOnOne = event.getStartTime();
       }
     }
