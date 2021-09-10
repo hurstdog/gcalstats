@@ -494,8 +494,8 @@ function onOpen() {
 // Collects statistics on 1:1s and general meetings on the user's default calendar.
 //
 function CollectMeetingStats() {
-  var events = CalendarApp.getDefaultCalendar().getEvents(getDateByDays(RANGE_DAYS_PAST * -1),
-                                                          getDateByDays(RANGE_DAYS_FUTURE));
+  const cal = CalendarApp.getCalendarById(OWNER_EMAIL);
+  var events = cal.getEvents(getDateByDays(RANGE_DAYS_PAST * -1), getDateByDays(RANGE_DAYS_FUTURE));
   
   var oneOnOneList = new OneOnOneListCollector(getListSheet());
   var stats = new MeetingStatsCollector(getStatsSheet());
