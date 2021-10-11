@@ -33,10 +33,18 @@ const WORK_DAYS_PER_WEEK = 5;
 // WORK_HOURS_PER_DAY * WORK_DAYS_PER_WEEK hours of UNSCHEDULED_TIME.
 const UNSCHEDULED_TIME = "Unscheduled";
 
-/////////////////////////////////////////////////////////////////////////////////
+// Lists of email addresses that should be canonicalized. Used to de-dupe when people
+// have personal and work emails attached to a 1:1.
+const ALIASES = {
+  'foo@example.com': 'bar@example.com'
+};
+
 // End user configurable Constants.
+//
 // Below here are constants for the running of the script, and you probalby
 // shouldn't change them without fussing with the script code as well.
+/////////////////////////////////////////////////////////////////////////////////
+
 
 // Name of the sheet to show the 1:1 ranking results.
 // Will create if it doesn't exist, otherwise will re-use the existing.
@@ -166,7 +174,7 @@ class OneOnOneListCollector {
 
     const eventStart = event.getStartTime();
     const diffMs = now - eventStart;
-    
+
     if (diffMs > 0) {
       // Past events
       // Update the last 1:1 time if
@@ -239,9 +247,49 @@ class OneOnOneListCollector {
   // Argument:
   //   event: CalendarEvent
   _isOneOnOne(event) {
-    var guests = event.getGuestList(true);
+    var guests = this._getCanonicalGuestList(event);
+
     return guests.length == 2;
   }
+
+  // Given a CalendarEvent, this will return a list of the attendees removing any
+  // ALIASES defined in the constants.
+  _getCanonicalGuestList(event) {
+    var guests = event.getGuestList(true);
+
+    // Canonicalize according to aliases, by using an associative array
+    var canonGuests = {};
+    for (const g of guests) {
+      if (g.getEmail() in ALIASES) {
+        canonGuests[ALIASES[g.getEmail()]] = 1;
+      } else {
+        canonGuests[g.getEmail()] = 1;
+      }
+    }
+
+    return Object.keys(canonGuests);
+  }
+
+/*
+  _isOneOnOne(event) {
+    var guests = event.getGuestList(true);
+
+    // Canonicalize according to aliases, by using an associative array
+    var canonGuests = {};
+    for (const g of guests) {
+      if (g.getEmail() in ALIASES) {
+        canonGuests[ALIASES[g.getEmail()]] = 1;
+      } else {
+        canonGuests[g.getEmail()] = 1;
+      }
+    }
+
+    //return guests.length == 2;
+    var isone = Object.keys(canonGuests).length == 2;
+    return isone;
+  }
+*/
+
 
   // Returns the email frequency data structure as an array of arrays, ready to
   // pass to Range.setValues()
@@ -268,16 +316,16 @@ class OneOnOneListCollector {
   // Given an event with two guests, returns the guest email that isn't OWNER_EMAIL
   // Prints an error and returns null on lists that don't contain two entries.
   _getOneOnOneGuestEmail(event) {
-    var guestList = event.getGuestList(true);
+    var guestList = this._getCanonicalGuestList(event);
     if (guestList.length != 2) {
       Logger.log('Too many guests in purported 1:1 (Title: ' + event.getTitle() + ', skipping');
       return null;
     }
 
     var guest = "";
-    for (const g of guestList) {
-      if (g.getEmail() != OWNER_EMAIL) {
-        guest = g.getEmail();
+    for (const email of guestList) {
+      if (email != OWNER_EMAIL) {
+        guest = email;
       }
     }
 
